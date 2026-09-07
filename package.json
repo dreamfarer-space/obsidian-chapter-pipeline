@@ -1,10 +1,11 @@
 {
   "name": "obsidian-charter-pipeline",
-  "version": "1.1.3",
+  "version": "1.2.0",
   "description": "Minimalist Linear-style floating horizontal dash stepper with KaTeX formula preview and pinned top navigation for Obsidian.",
   "main": "main.js",
   "scripts": {
-    "dev": "node main.js",
+    "build": "node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
     "test": "node --test main.test.js"
   },
   "keywords": [
@@ -27,5 +28,11 @@
   "bugs": {
     "url": "https://github.com/LeaningLearner/obsidian-charter-pipeline/issues"
   },
-  "homepage": "https://github.com/LeaningLearner/obsidian-charter-pipeline#readme"
+  "homepage": "https://github.com/LeaningLearner/obsidian-charter-pipeline#readme",
+  "devDependencies": {
+    "@types/node": "^26.4.1",
+    "esbuild": "^0.28.2",
+    "obsidian": "^1.13.1",
+    "typescript": "^5.9.3"
+  }
 }

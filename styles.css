@@ -180,8 +180,8 @@
   border-radius: 2px;
   margin-left: 0;
   background-color: var(--text-muted, rgba(125, 125, 125, 0.45));
-  transition: width 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
-              transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
+  transition: width 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
               background-color 0.18s ease,
               opacity 0.18s ease,
               height 0.18s ease;
@@ -325,7 +325,7 @@ body .workspace-leaf .cm-highlight {
   visibility: hidden;
   transform: translateY(-50%) translateX(-8px) scale(0.96);
   transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1),
-              transform 0.24s cubic-bezier(0.34, 1.56, 0.64, 1),
+              transform 0.24s cubic-bezier(0.16, 1, 0.3, 1),
               visibility 0.18s ease;
   display: flex;
   flex-direction: column;
@@ -422,7 +422,7 @@ body.theme-light .codex-floating-tooltip.is-solid {
 /* 激活态徽章（当前阅读所在小节）：沉浸实心主题色 + 白字 + 柔和光晕 */
 .codex-level-badge.is-active {
   background: var(--codex-active-color, #3b82f6) !important;
-  color: #ffffff !important;
+  color: var(--codex-active-foreground, #ffffff) !important;
   border-color: transparent !important;
   box-shadow: 0 2px 8px rgba(59, 130, 246, 0.38), 0 0 2px rgba(59, 130, 246, 0.5) !important;
   font-weight: 800;
@@ -560,9 +560,61 @@ body.theme-light .codex-floating-tooltip.is-solid {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .codex-stepper-container,
+  .codex-dash-item,
+  .codex-dash-bar,
+  .codex-progress-indicator,
+  .codex-floating-tooltip,
+  .codex-level-badge,
+  .suggestion-item.codex-suggest-item,
+  .suggestion-item.codex-modal-item {
+    animation: none !important;
+    transition: none !important;
+  }
+
   .codex-bookmark-marker,
   .codex-bookmark-label::before {
     transition: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .codex-stepper-container,
+  .codex-floating-tooltip,
+  .modal.codex-suggest-modal {
+    forced-color-adjust: none;
+    border-color: CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  .codex-dash-bar,
+  .codex-progress-indicator {
+    background-color: Highlight !important;
+    box-shadow: none !important;
+  }
+
+  .codex-dash-item:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 3px;
+  }
+}
+
+@media (max-width: 600px) {
+  .codex-stepper-container {
+    left: 4px;
+    max-height: calc(100% - 24px);
+  }
+
+  .codex-stepper-container.dock-right {
+    right: 4px;
+  }
+
+  .codex-floating-tooltip {
+    width: min(290px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+    padding: 9px 11px;
+    border-radius: 10px;
   }
 }
 

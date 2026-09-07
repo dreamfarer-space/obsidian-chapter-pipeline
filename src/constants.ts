@@ -1,0 +1,94 @@
+import type { PluginSettings } from './types';
+
+export const DEFAULT_SETTINGS: PluginSettings = {
+  minHeadingLevel: 1,
+  maxHeadingLevel: 2,
+  ignoreFirstH1: false,
+  showExcerpt: true,
+  excerptLength: 140,
+  activeColor: '#3b82f6',
+  customActiveColor: '#3b82f6',
+  narrowThreshold: 600,
+  enableSound: true,
+  soundVolume: 50,
+  dockPosition: 'left',
+  hierarchyMode: 'hover-expand',
+  showProgressRail: false,
+  tooltipGlassmorphism: true,
+  showChapterOrder: false,
+  readingBookmarksEnabled: false,
+  readingState: { version: 1, files: {} }
+};
+
+/** Stable DOM hooks shared by views and UI modules. */
+export const DOM_CLASSES = {
+  stepper: 'codex-stepper-container',
+  dash: 'codex-chapter-dash',
+  tooltip: 'codex-floating-tooltip',
+  modal: 'codex-suggest-modal',
+  collapsed: 'is-collapsed',
+  narrow: 'is-narrow',
+  progressRail: 'codex-progress-rail'
+} as const;
+
+export type Locale = 'en' | 'zh';
+export type I18nDictionary = Record<string, string>;
+
+/** UI copy kept in one module so future translations do not touch behavior. */
+export const I18N: Record<Locale, I18nDictionary> = {
+  en: {
+    tabTitle: 'Charter Pipeline Settings',
+    searchPlaceholder: 'Search chapter or formula...',
+    revisitLabel: 'Revisit',
+    importantLabel: 'Important',
+    resumeAvailable: 'Resume available: {title}',
+    resumeUnavailable: 'No saved reading position in this note.',
+    resumeNotFound: 'The saved chapter is no longer available.',
+    readingBookmarksCleared: 'Reading progress and bookmarks cleared for this note.',
+    cleanupSuccessNotice: 'Cleaned up {count} invalid note record(s).',
+    cleanupNoneNotice: 'No invalid records found. Everything is up to date.',
+    commandJumpPrev: 'Charter Pipeline: Jump to previous chapter',
+    commandJumpNext: 'Charter Pipeline: Jump to next chapter',
+    commandOpenPalette: 'Charter Pipeline: Search & switch chapter (Palette)',
+    commandResumeLastChapter: 'Charter Pipeline: Resume last chapter',
+    commandToggleRevisit: 'Charter Pipeline: Toggle revisit bookmark for current chapter',
+    commandToggleImportant: 'Charter Pipeline: Toggle important bookmark for current chapter',
+    commandClearReadingBookmarks: 'Charter Pipeline: Clear reading progress & bookmarks for current note',
+    commandCleanupReadingBookmarks: 'Charter Pipeline: Clean up invalid reading progress & bookmarks'
+  },
+  zh: {
+    tabTitle: 'Charter Pipeline 设置',
+    searchPlaceholder: '搜索章节或公式…',
+    revisitLabel: '稍后回看',
+    importantLabel: '重点',
+    resumeAvailable: '可恢复上次阅读：{title}',
+    resumeUnavailable: '这篇笔记没有保存的阅读位置。',
+    resumeNotFound: '保存的章节已不存在，无法恢复。',
+    readingBookmarksCleared: '已清除本笔记的阅读断点与书签。',
+    cleanupSuccessNotice: '已清理 {count} 条失效笔记的记录。',
+    cleanupNoneNotice: '未发现失效记录，当前配置非常整洁。',
+    commandJumpPrev: 'Charter Pipeline：跳转至上一章节',
+    commandJumpNext: 'Charter Pipeline：跳转至下一章节',
+    commandOpenPalette: 'Charter Pipeline：搜索并快速跳转章节',
+    commandResumeLastChapter: 'Charter Pipeline：恢复上次阅读章节',
+    commandToggleRevisit: 'Charter Pipeline：切换当前章节的稍后回看书签',
+    commandToggleImportant: 'Charter Pipeline：切换当前章节的重点书签',
+    commandClearReadingBookmarks: 'Charter Pipeline：清除当前笔记的阅读断点与书签',
+    commandCleanupReadingBookmarks: 'Charter Pipeline：清理已失效阅读断点与书签'
+  }
+};
+
+export function getLocale(): Locale {
+  const globalWindow = typeof window !== 'undefined' ? window : undefined;
+  const language = globalWindow?.localStorage?.getItem('language')
+    || (typeof navigator !== 'undefined' ? navigator.language : 'en');
+  return String(language || 'en').toLowerCase().startsWith('zh') ? 'zh' : 'en';
+}
+
+export function translate(key: string, variables: Record<string, unknown> = {}): string {
+  const strings = I18N[getLocale()] || I18N.en;
+  const value = strings[key] ?? I18N.en[key] ?? key;
+  return value.replace(/\{(\w+)\}/g, (match, name: string) => (
+    variables[name] === undefined || variables[name] === null ? match : String(variables[name])
+  ));
+}

@@ -36,12 +36,34 @@
 
 Unlike traditional bulky sidebar trees or noisy full-text minimaps, Charter Pipeline renders a clean vertical series of **floating horizontal dash bars** on the left margin of your note. With proportional heading lengths, instant hover popovers with **KaTeX math previews**, **tactile micro-switch feedback**, and **rock-solid pinned-top navigation** across both Editing and Reading views, navigating long technical notes, research, documentation, and study material becomes effortless.
 
-### 🆕 v1.1.3 Highlights
+### 🆕 v1.2.0 Highlights
+
+- **Typed modular architecture**: Moves parser, storage, trackers, UI, sound, and shared types into `src/` modules while keeping a generated CommonJS entry point for Obsidian.
+- **Large-note performance and lifecycle safety**: Adds bounded parse caching, revision-aware invalidation, passive rAF-coalesced scrolling, and deterministic cleanup on unload.
+- **Accessible, resilient interface**: Adds keyboard and screen-reader semantics, contrast-aware active colors, reduced-motion and forced-colors support, touch-friendly tooltip triggers, and tuned tactile audio.
+
+### v1.1.3 Highlights
 
 - **Highlight & LaTeX Formula Protection**: Preserves user's `==highlight==` styling across all views while strictly scoping jump-flash suppression; preserves LaTeX `\\` row breaks in multiline environments (`aligned`, `cases`, `matrix`); balances math delimiters upon excerpt truncation.
 - **High-Performance O(1) Excerpt Extraction**: Large chapters use early-exit scanning (< 15ms on 50,000-line notes); isolates document capture scroll listener to the active container.
 - **Storage Auto-Pruning & Audio Cleanup**: Automatically prunes deleted notes from local reading bookmarks upon `vault.on('delete')`; properly releases Web Audio resources on plugin unload.
 - **UX & Accessibility Enhancements**: Active chapter order indicator maintains a fixed vertical baseline without horizontal jitter; quick switcher palette supports filtering by heading level (`h1..h6`, `#`) and bookmarks (`revisit`, `important`); configurable `excerptLength` (60-300 chars); full keyboard focus/blur formula tooltip support.
+
+### 🛠️ Development build
+
+The plugin now uses a typed `src/` module layout and esbuild while keeping the generated CommonJS entry point that Obsidian loads:
+
+```bash
+npm install
+npm run build       # production bundle -> main.js
+npm run dev         # development watch build
+npx tsc --noEmit    # strict TypeScript check
+npm test            # 48 compatibility tests
+```
+
+See [`docs/PHASE1_MIGRATION.md`](docs/PHASE1_MIGRATION.md) for the module dependency diagram and migration boundary.
+The Phase 2 performance notes and Phase 3 compliance audit are in [`docs/PHASE2_PERFORMANCE.md`](docs/PHASE2_PERFORMANCE.md) and [`docs/PHASE3_COMPLIANCE_AUDIT.md`](docs/PHASE3_COMPLIANCE_AUDIT.md).
+UI/UX motion, contrast, touch and keyboard details are tracked in [`docs/PHASE4_UI_UX.md`](docs/PHASE4_UI_UX.md).
 
 ### 🆕 v1.1.2 Highlights
 
@@ -166,7 +188,13 @@ Charter Pipeline provides commands that you can bind to custom hotkeys in **Sett
 
 区别于传统占用大量屏幕空间的臃肿侧边栏目录或信息杂乱的代码小地图，Charter Pipeline 在笔记左侧边缘渲染一列**纯净散落的悬浮横线条**。通过精巧的长短区分（H1~H6）、**支持 KaTeX 数学公式渲染的 3 行气泡卡片**、**清脆微动开关物理音效**、以及**编辑/阅读双模式像素级绝对置顶平滑跳转**，让长文浏览与章节检索变得优雅而极速。
 
-### 🆕 v1.1.3 更新
+### 🆕 v1.2.0 更新
+
+- **TypeScript 模块化架构**：将解析器、存储、滚动追踪、界面、音效和共享类型拆分到 `src/`，同时保留 Obsidian 可直接加载的 CommonJS 入口。
+- **超长笔记性能与生命周期安全**：加入有界解析缓存、修订版本失效机制、被动事件与 rAF 合帧滚动更新，并在卸载时统一清理资源。
+- **无障碍与跨主题适配**：补充键盘和屏幕阅读器语义、对比度感知高亮色、减弱动效与强制配色支持、触控友好气泡触发和更柔和的机械音效。
+
+### v1.1.3 更新
 
 - **正文高亮与 LaTeX 公式保护**：彻底避免污染用户笔记原生 `==高亮==` 样式；保留 `aligned`、`cases`、`matrix` 等多行数学环境中的关键换行符 `\\`；公式摘要截断自动平衡 `$` 定界符并规范显示省略号。
 - **O(1) 超长笔记极速摘要解析**：章节摘要采用正向早停扫描机制，50,000 行超长文档解析耗时降至 15ms 以内；精确过滤全局滚动事件，消除无谓重算。
