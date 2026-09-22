@@ -3,7 +3,8 @@ const fs = require('node:fs');
 const Module = require('node:module');
 const path = require('node:path');
 const test = require('node:test');
-const ts = require('typescript');
+const typescriptModule = require('typescript');
+const ts = typescriptModule.default || typescriptModule;
 
 function loadLivePreviewTracker() {
   const filename = path.join(__dirname, 'src/views/live-preview-tracker.ts');
@@ -123,7 +124,7 @@ function makeRenderedLine(line, top, onGeometryRead) {
   return element;
 }
 
-function recycleViewport(lines, firstLine, onGeometryRead) {
+function recycleViewport(lines, firstLine) {
   lines.forEach((line, index) => {
     line.line = firstLine + index;
     line.top = index * 20;
@@ -162,7 +163,7 @@ test('LivePreviewTracker resolves 1000+ chapters from viewport document lines wh
 
   // Scroll into chapter 50 after its line-5000 heading has been recycled out of
   // CodeMirror's DOM. Only ordinary viewport rows remain rendered.
-  recycleViewport(rendered, 5050, () => { geometryReads += 1; });
+  recycleViewport(rendered, 5050);
   FakeMutationObserver.instances[0].trigger([{
     type: 'attributes',
     attributeName: 'data-line',
@@ -173,7 +174,7 @@ test('LivePreviewTracker resolves 1000+ chapters from viewport document lines wh
   assert.equal(active.at(-1), 50, 'off-DOM chapter heading must still remain the active chapter');
 
   // Reuse the same DOM nodes during fast forward and reverse scrolling.
-  recycleViewport(rendered, 90050, () => { geometryReads += 1; });
+  recycleViewport(rendered, 90050);
   FakeMutationObserver.instances[0].trigger([{
     type: 'attributes',
     attributeName: 'data-line',
@@ -183,7 +184,7 @@ test('LivePreviewTracker resolves 1000+ chapters from viewport document lines wh
   flushRaf();
   assert.equal(active.at(-1), 900);
 
-  recycleViewport(rendered, 20050, () => { geometryReads += 1; });
+  recycleViewport(rendered, 20050);
   FakeMutationObserver.instances[0].trigger([{
     type: 'attributes',
     attributeName: 'data-line',
