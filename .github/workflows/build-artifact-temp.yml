@@ -10,6 +10,7 @@ permissions:
 jobs:
   bundle:
     runs-on: ubuntu-latest
+    timeout-minutes: 3
     steps:
       - uses: actions/checkout@v7
         with:
@@ -40,7 +41,16 @@ jobs:
               text = text.replace(live_anchor, live_anchor + live_insertion, 1)
           path.write_text(text)
           PY
-      - run: npm test
+      - name: Run tests with hang diagnostics
+        run: |
+          set +e
+          timeout 30s npm test > test-output.log 2>&1
+          status=$?
+          cat test-output.log
+          if [ "$status" -ne 0 ]; then
+            echo "npm test exit status: $status"
+            exit "$status"
+          fi
       - run: npm run build
       - name: Commit integration tests and generated bundle when changed
         run: |
