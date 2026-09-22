@@ -3,25 +3,21 @@ const fs = require('node:fs');
 const Module = require('node:module');
 const path = require('node:path');
 const test = require('node:test');
-const typescriptModule = require('typescript');
-const ts = typescriptModule.default || typescriptModule;
+const { transformSync } = require('esbuild');
 
 function loadLivePreviewTracker() {
   const filename = path.join(__dirname, 'src/views/live-preview-tracker.ts');
   const source = fs.readFileSync(filename, 'utf8');
-  const { outputText, diagnostics } = ts.transpileModule(source, {
-    compilerOptions: {
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.CommonJS,
-    },
-    reportDiagnostics: true,
+  const { code } = transformSync(source, {
+    loader: 'ts',
+    format: 'cjs',
+    target: 'es2022',
   });
 
-  assert.equal(diagnostics?.length ?? 0, 0);
   const compiled = new Module(filename, module);
   compiled.filename = filename;
   compiled.paths = Module._nodeModulePaths(path.dirname(filename));
-  compiled._compile(outputText, filename);
+  compiled._compile(code, filename);
   return compiled.exports.LivePreviewTracker;
 }
 
