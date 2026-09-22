@@ -35,6 +35,7 @@ export interface PluginSettings {
   customActiveColor: string;
   narrowThreshold: number;
   enableSound: boolean;
+  enableScrollSound: boolean;
   soundVolume: number;
   dockPosition: DockPosition;
   hierarchyMode: HierarchyMode;
