@@ -3,6 +3,8 @@ import type { ChapterNode } from '../types';
 export interface LivePreviewTrackerOptions {
   container: HTMLElement;
   onActiveChapter: (index: number) => void;
+  /** Set false when an existing renderer already established the initial UI state. */
+  trackImmediately?: boolean;
 }
 
 interface RenderedChapterCandidate {
@@ -64,7 +66,7 @@ export class LivePreviewTracker {
     this.renderedCandidates = [];
     this.candidatesDirty = true;
     this.lastActiveIndex = -1;
-    this.schedule();
+    if (this.options.trackImmediately !== false) this.schedule();
   }
 
   private readonly schedule = (): void => {
