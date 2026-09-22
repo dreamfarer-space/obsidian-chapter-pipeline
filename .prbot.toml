@@ -1,0 +1,13 @@
+[review]
+exclude = [
+  "main.js",
+  "package-lock.json",
+  "assets/**"
+]
+instructions = [
+  "Prioritize correctness regressions, Obsidian lifecycle leaks, event-listener cleanup, unsafe DOM behavior, and performance regressions on large notes.",
+  "Treat src/ as source of truth. main.js is a generated production bundle and should not receive duplicate findings when the underlying src/ change is already reviewed.",
+  "Check that behavior changes have appropriate tests in main.test.js where practical.",
+  "Avoid style-only comments unless they identify a concrete maintainability or correctness risk."
+]
+max_comments = 8
