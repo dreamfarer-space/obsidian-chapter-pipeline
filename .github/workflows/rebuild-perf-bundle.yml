@@ -20,8 +20,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
       - run: npm run build
+      - run: npm test
       - name: Commit generated bundle
         run: |
           if git diff --quiet -- main.js; then
