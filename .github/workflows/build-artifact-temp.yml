@@ -20,16 +20,32 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - name: Build latest production bundle before integration tests
-        run: npm run build
-      - name: Add production session integration assertions
+      - name: Add legacy-to-typed chapter snapshot bridge and integration assertions
         run: |
           python - <<'PY'
           from pathlib import Path
-          path = Path('main.test.js')
-          text = path.read_text()
+
+          legacy = Path('src/legacy-main.js')
+          text = legacy.read_text()
+          constructor_anchor = "    this.viewTooltips = new Map();\n"
+          constructor_insert = "    this.viewChapterSnapshots = new WeakMap();\n"
+          if constructor_insert not in text:
+              if constructor_anchor not in text:
+                  raise SystemExit('legacy constructor anchor not found')
+              text = text.replace(constructor_anchor, constructor_anchor + constructor_insert, 1)
+
+          parse_anchor = "    const chapters = this.extractChapters(content, file);\n"
+          parse_insert = "    this.viewChapterSnapshots.set(view, chapters);\n"
+          if parse_insert not in text:
+              if parse_anchor not in text:
+                  raise SystemExit('legacy chapter extraction anchor not found')
+              text = text.replace(parse_anchor, parse_anchor + parse_insert, 1)
+          legacy.write_text(text)
+
+          test = Path('main.test.js')
+          text = test.read_text()
           anchor = "  assert.equal(disabledHarness.sourceScroller.listeners.get('scroll'), undefined);\n"
-          insertion = """  const readingSession = disabledHarness.plugin.viewSessions?.get(disabledHarness.view);\n  console.log('typed-session-diagnostic', { exists: Boolean(readingSession), sessionCtor: readingSession?.constructor?.name, trackerCtor: readingSession?.tracker?.constructor?.name, exportedSessionCtor: ChapterPipelinePlugin.ViewSession?.name });\n  assert.ok(readingSession instanceof ChapterPipelinePlugin.ViewSession);\n  assert.ok(readingSession.tracker instanceof ChapterPipelinePlugin.ReadingViewTracker);\n  assert.equal(disabledHarness.plugin.scrollBindings.has(disabledHarness.container), false);\n"""
+          insertion = """  const readingSession = disabledHarness.plugin.viewSessions?.get(disabledHarness.view);\n  assert.ok(readingSession instanceof ChapterPipelinePlugin.ViewSession);\n  assert.ok(readingSession.tracker instanceof ChapterPipelinePlugin.ReadingViewTracker);\n  assert.equal(disabledHarness.plugin.scrollBindings.has(disabledHarness.container), false);\n"""
           if insertion not in text:
               if anchor not in text:
                   raise SystemExit('reading session test anchor not found')
@@ -41,8 +57,10 @@ jobs:
               if live_anchor not in text:
                   raise SystemExit('live preview session test anchor not found')
               text = text.replace(live_anchor, live_anchor + live_insertion, 1)
-          path.write_text(text)
+          test.write_text(text)
           PY
+      - name: Build latest production bundle before integration tests
+        run: npm run build
       - name: Run tests with hang diagnostics
         run: |
           set +e
@@ -53,13 +71,13 @@ jobs:
             echo "npm test exit status: $status"
             exit "$status"
           fi
-      - name: Commit integration tests and generated bundle when changed
+      - name: Commit bridge, integration tests, and generated bundle
         run: |
-          if git diff --quiet -- main.test.js main.js; then
+          if git diff --quiet -- src/legacy-main.js main.test.js main.js; then
             exit 0
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add main.test.js main.js
+          git add src/legacy-main.js main.test.js main.js
           git commit -m "test: cover production typed view sessions"
           git push origin HEAD:${{ github.head_ref }}
