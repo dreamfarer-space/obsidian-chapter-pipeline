@@ -7,6 +7,51 @@ import { ReadingViewTracker } from './reading-view-tracker';
 export type ViewSessionMode = 'reading' | 'live-preview';
 export type ViewSessionTracker = ReadingViewTracker | LivePreviewTracker;
 
+interface CodeMirrorViewLike {
+  lineBlockAtHeight?: (height: number) => { from?: number } | null;
+  state?: {
+    doc?: {
+      lineAt?: (position: number) => { number?: number } | null;
+    };
+  };
+  scrollDOM?: HTMLElement;
+}
+
+function getLivePreviewViewportLine(view: unknown, container: HTMLElement): number | null {
+  const host = view as {
+    editor?: unknown;
+    editMode?: { editor?: unknown; cm?: unknown };
+  };
+  const editor = host.editor as { cm?: unknown } | undefined;
+  const editModeEditor = host.editMode?.editor as { cm?: unknown } | undefined;
+  const candidates = [
+    editor?.cm,
+    editModeEditor?.cm,
+    host.editMode?.cm,
+    host.editor,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const cm = candidate as CodeMirrorViewLike;
+    if (typeof cm.lineBlockAtHeight !== 'function' || typeof cm.state?.doc?.lineAt !== 'function') continue;
+
+    const scrollDOM = cm.scrollDOM ?? container.querySelector<HTMLElement>('.cm-scroller');
+    if (!scrollDOM) continue;
+
+    const baseline = Math.max(0, (scrollDOM.scrollTop || 0) + 70);
+    const lineBlock = cm.lineBlockAtHeight(baseline);
+    if (!lineBlock || typeof lineBlock.from !== 'number') continue;
+
+    const line = cm.state.doc.lineAt(lineBlock.from);
+    const lineNumber = line?.number;
+    if (typeof lineNumber === 'number' && Number.isInteger(lineNumber) && lineNumber > 0) {
+      return lineNumber - 1;
+    }
+  }
+
+  return null;
+}
+
 export interface ViewSessionOptions {
   view: unknown;
   mode: ViewSessionMode;
@@ -81,6 +126,7 @@ export class ViewSession {
       this.tracker = new LivePreviewTracker({
         container: options.container,
         onActiveChapter: handleActiveChapter,
+        getViewportLine: () => getLivePreviewViewportLine(options.view, options.container),
         trackImmediately: options.trackImmediately,
       });
     }
