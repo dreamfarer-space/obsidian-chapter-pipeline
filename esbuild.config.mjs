@@ -12,12 +12,12 @@ const options = {
   sourcemap: production ? false : 'inline',
   minify: production,
   legalComments: 'none',
-  logLevel: 'info'
+  logLevel: 'info',
+  ...(production ? { drop: ['console', 'debugger'] } : {})
 };
 
 if (production) {
   await build(options);
-  console.log('Charter Pipeline production build complete.');
 } else {
   const watchContext = await context(options);
   await watchContext.watch();

@@ -88,21 +88,22 @@ Charter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正�
 
 ## 安装
 
-### Obsidian 社区插件
+Charter Pipeline 正在准备提交 Obsidian 社区插件市场。在正式通过审核前，请使用 BRAT 或 GitHub Release 手动安装。
 
-如果 Charter Pipeline 已出现在你的 Obsidian 社区插件列表中：
+### BRAT
 
-1. 打开 **设置 → 第三方插件 / Community Plugins**。
-2. 搜索 **Charter Pipeline**。
-3. 安装并启用。
+1. 从 Obsidian 社区插件安装并启用 **BRAT**。
+2. 在 BRAT 中选择 **Add Beta plugin**。
+3. 输入 `dreamfarer-space/obsidian-charter-pipeline` 并添加插件。
+4. 在 **设置 → 第三方插件 / Community Plugins** 中启用 **Charter Pipeline**。
 
 ### 手动安装
 
-1. 从最新 [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest) 下载 `chapter-pipeline-<version>.zip`，也可以分别下载 `main.js`、`manifest.json`、`styles.css`。
+1. 从最新 [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest) 下载 `charter-pipeline-<version>.zip`，也可以分别下载 `main.js`、`manifest.json`、`styles.css`。
 2. 将三个插件文件放入：
 
 ```text
-<你的仓库>/.obsidian/plugins/chapter-pipeline/
+<你的仓库>/.obsidian/plugins/charter-pipeline/
 ```
 
 3. 重载 Obsidian，然后在 **设置 → 第三方插件** 中启用 **Charter Pipeline**。
@@ -176,6 +177,7 @@ CI 还会验证生产构建后 `main.js` 不会出现未提交差异。
 - [`PHASE2_PERFORMANCE.md`](docs/PHASE2_PERFORMANCE.md)：性能优化记录
 - [`PHASE3_COMPLIANCE_AUDIT.md`](docs/PHASE3_COMPLIANCE_AUDIT.md)：合规与生命周期审计
 - [`PHASE4_UI_UX.md`](docs/PHASE4_UI_UX.md)：交互、动效、触屏与可访问性
+- [`COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)：社区插件发布、兼容性与移动端验证清单
 
 ## 隐私
 
