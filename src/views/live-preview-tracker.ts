@@ -10,6 +10,9 @@ interface RenderedChapterCandidate {
   chapterIndex: number;
 }
 
+const CANDIDATE_SELECTOR = '.cm-line, .cm-heading';
+const CANDIDATE_CLASS_PATTERN = /(^|\s)(cm-line|cm-heading)(\s|$)/;
+
 /** CodeMirror 6 tracker. It only reads geometry inside a scheduled frame. */
 export class LivePreviewTracker {
   private readonly options: LivePreviewTrackerOptions;
@@ -28,14 +31,29 @@ export class LivePreviewTracker {
 
     this.observer = typeof MutationObserver === 'undefined'
       ? null
-      : new MutationObserver(() => {
-        this.candidatesDirty = true;
+      : new MutationObserver((records) => {
+        let shouldSchedule = false;
+        let shouldRefreshCandidates = false;
+
+        for (const record of records) {
+          const impact = this.getMutationImpact(record);
+          if (impact === 'refresh') {
+            shouldSchedule = true;
+            shouldRefreshCandidates = true;
+            break;
+          }
+          if (impact === 'layout') shouldSchedule = true;
+        }
+
+        if (!shouldSchedule) return;
+        if (shouldRefreshCandidates) this.candidatesDirty = true;
         this.schedule();
       });
     this.observer?.observe(this.options.container, {
       childList: true,
       subtree: true,
       attributes: true,
+      attributeOldValue: true,
       attributeFilter: ['class', 'data-line'],
     });
   }
@@ -57,12 +75,57 @@ export class LivePreviewTracker {
     });
   };
 
+  private isCandidateElement(value: unknown): value is Element {
+    if (!value || typeof (value as Element).matches !== 'function') return false;
+    return (value as Element).matches(CANDIDATE_SELECTOR);
+  }
+
+  private containsCandidate(value: unknown): boolean {
+    if (!value) return false;
+    const node = value as Element;
+    if (typeof node.matches === 'function' && node.matches(CANDIDATE_SELECTOR)) return true;
+    return typeof node.querySelector === 'function' && Boolean(node.querySelector(CANDIDATE_SELECTOR));
+  }
+
+  private isInsideCandidate(value: unknown): boolean {
+    if (!value) return false;
+    const node = value as Element;
+    if (this.isCandidateElement(node)) return true;
+    return typeof node.closest === 'function' && Boolean(node.closest(CANDIDATE_SELECTOR));
+  }
+
+  private getMutationImpact(record: MutationRecord): 'none' | 'layout' | 'refresh' {
+    if (record.type === 'attributes') {
+      if (record.attributeName === 'data-line') {
+        return this.isCandidateElement(record.target) ? 'refresh' : 'none';
+      }
+
+      if (record.attributeName === 'class') {
+        const wasCandidate = CANDIDATE_CLASS_PATTERN.test(record.oldValue || '');
+        return this.isCandidateElement(record.target) || wasCandidate ? 'refresh' : 'none';
+      }
+
+      return 'none';
+    }
+
+    if (record.type !== 'childList') return 'none';
+
+    for (const node of Array.from(record.addedNodes)) {
+      if (this.containsCandidate(node)) return 'refresh';
+    }
+    for (const node of Array.from(record.removedNodes)) {
+      if (this.containsCandidate(node)) return 'refresh';
+    }
+
+    return this.isInsideCandidate(record.target) ? 'layout' : 'none';
+  }
+
   private refreshCandidates(): void {
     if (!this.candidatesDirty) return;
 
     const next: RenderedChapterCandidate[] = [];
     const seen = new Set<number>();
-    const rendered = this.options.container.querySelectorAll('.cm-line, .cm-heading');
+    const rendered = this.options.container.querySelectorAll(CANDIDATE_SELECTOR);
     for (const element of rendered) {
       const line = Number(element.getAttribute('data-line'));
       if (!Number.isInteger(line)) continue;
