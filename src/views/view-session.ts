@@ -20,6 +20,8 @@ export interface ViewSessionOptions {
   onSelectChapter: (chapter: ChapterNode) => void;
   onActiveChapter: (index: number, previousIndex: number) => void;
   onScrollTick?: () => void;
+  /** Disable the first geometry pass when adopting UI already initialized by a compatibility renderer. */
+  trackImmediately?: boolean;
 }
 
 /**
@@ -73,11 +75,13 @@ export class ViewSession {
         findHeadings: options.findReadingHeading,
         onActiveChapter: handleActiveChapter,
         onScrollTick: options.onScrollTick,
+        trackImmediately: options.trackImmediately,
       });
     } else {
       this.tracker = new LivePreviewTracker({
         container: options.container,
         onActiveChapter: handleActiveChapter,
+        trackImmediately: options.trackImmediately,
       });
     }
 
