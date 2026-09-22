@@ -1076,6 +1076,7 @@ class ChapterPipelinePlugin extends Plugin {
     this.renderVersions = new Map();
     this.scrollBindings = new Map();
     this.viewTooltips = new Map();
+    this.viewChapterSnapshots = new WeakMap();
     this.soundEngine = new TypedSoundEngine();
     this.chapterCache = new TypedChapterParseCache(32);
     this.documentRevisions = new Map();
@@ -1937,6 +1938,7 @@ class ChapterPipelinePlugin extends Plugin {
       return;
     }
     const chapters = this.extractChapters(content, file);
+    this.viewChapterSnapshots.set(view, chapters);
     this.maybeShowResumeNotice(view, content, file);
     if (chapters.length === 0) return;
 

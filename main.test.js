@@ -504,6 +504,10 @@ test('Reading View renders the chapter pipeline, binds scroll, and reflects chap
   assert.equal(stepper.classList.contains('show-chapter-order'), false);
   assert.equal(disabledHarness.scroller.listeners.get('scroll')?.length, 1);
   assert.equal(disabledHarness.sourceScroller.listeners.get('scroll'), undefined);
+  const readingSession = disabledHarness.plugin.viewSessions?.get(disabledHarness.view);
+  assert.ok(readingSession instanceof ChapterPipelinePlugin.ViewSession);
+  assert.ok(readingSession.tracker instanceof ChapterPipelinePlugin.ReadingViewTracker);
+  assert.equal(disabledHarness.plugin.scrollBindings.has(disabledHarness.container), false);
 
   const dashes = container.querySelectorAll('.codex-dash-item');
   assert.equal(dashes.length, 2);
@@ -514,6 +518,14 @@ test('Reading View renders the chapter pipeline, binds scroll, and reflects chap
   enabledHarness.plugin.settings.showChapterOrder = true;
   await enabledHarness.plugin.attachStepperToView(enabledHarness.view);
   assert.equal(enabledHarness.container.querySelector('.codex-stepper-container').classList.contains('show-chapter-order'), true);
+
+  const liveHarness = createReadingHarness();
+  liveHarness.view.getMode = () => 'source';
+  await liveHarness.plugin.attachStepperToView(liveHarness.view);
+  const liveSession = liveHarness.plugin.viewSessions?.get(liveHarness.view);
+  assert.ok(liveSession instanceof ChapterPipelinePlugin.ViewSession);
+  assert.ok(liveSession.tracker instanceof ChapterPipelinePlugin.LivePreviewTracker);
+  assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);
 });
 
 test('Reading View active tracking handles mode aliases and ignores hidden editor state', async () => {
