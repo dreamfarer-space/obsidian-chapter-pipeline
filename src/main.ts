@@ -23,9 +23,9 @@ interface ProductionPlugin {
   scrollBindings?: Map<unknown, LegacyScrollBinding>;
   viewSessions?: Map<object, ViewSession>;
   viewSessionVersions?: Map<object, number>;
-  chapterSnapshotsByFile?: WeakMap<object, ChapterNode[]>;
+  viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
   viewTooltips?: Map<object, HTMLElement>;
-  extractChapters?: (content: string, file: object, settings?: unknown) => ChapterNode[];
+  app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
   getViewScroller?: (container: HTMLElement, view: object) => HTMLElement | null;
   isReadingMode?: (view: object, container?: HTMLElement | null) => boolean;
@@ -57,30 +57,11 @@ function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElem
 function installTypedProductionSessions(): void {
   const prototype = LegacyPlugin.prototype as ProductionPlugin & {
     attachStepperToView?: (view: object) => Promise<void>;
+    updateAllMarkdownViews?: () => void;
     onunload?: () => void;
   };
   const legacyAttach = prototype.attachStepperToView;
   if (!legacyAttach || (legacyAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled) return;
-
-  // The compatibility renderer reads the vault and parses chapters internally.
-  // Capture that exact parse result by file so the typed session can reuse it
-  // without triggering a second read/parse or racing concurrent reattachments.
-  const legacyExtractChapters = prototype.extractChapters;
-  if (legacyExtractChapters) {
-    prototype.extractChapters = function (
-      this: ProductionPlugin,
-      content: string,
-      file: object,
-      settings?: unknown,
-    ): ChapterNode[] {
-      const chapters = legacyExtractChapters.call(this, content, file, settings);
-      if (file && typeof file === 'object') {
-        this.chapterSnapshotsByFile ??= new WeakMap<object, ChapterNode[]>();
-        this.chapterSnapshotsByFile.set(file, chapters);
-      }
-      return chapters;
-    };
-  }
 
   const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
     this.viewSessions ??= new Map<object, ViewSession>();
@@ -101,8 +82,9 @@ function installTypedProductionSessions(): void {
     const stepperElement = container.querySelector('.codex-stepper-container') as HTMLElement | null;
     if (!stepperElement) return;
 
-    // Reuse the exact chapter snapshot parsed by the compatibility renderer.
-    const chapters = this.chapterSnapshotsByFile?.get(typedView.file as object) ?? [];
+    // Reuse the exact per-view chapter snapshot that produced the adopted dash DOM.
+    // Resume lookups may parse a wider heading range and must not replace it.
+    const chapters = this.viewChapterSnapshots?.get(view) ?? [];
     if (!chapters.length) return;
 
     const dashElements = Array.from(container.querySelectorAll('.codex-dash-item')) as HTMLElement[];
@@ -175,6 +157,24 @@ function installTypedProductionSessions(): void {
   };
   (typedAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled = true;
   prototype.attachStepperToView = typedAttach;
+
+  const legacyUpdateAllMarkdownViews = prototype.updateAllMarkdownViews;
+  if (legacyUpdateAllMarkdownViews) {
+    prototype.updateAllMarkdownViews = function (this: ProductionPlugin): void {
+      const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];
+      const mountedViews = new Set<object>();
+      leaves.forEach((leaf) => {
+        if (leaf?.view && typeof leaf.view === 'object') mountedViews.add(leaf.view);
+      });
+      this.viewSessions?.forEach((session, sessionView) => {
+        if (mountedViews.has(sessionView)) return;
+        session.dispose();
+        this.viewSessions?.delete(sessionView);
+        this.viewSessionVersions?.delete(sessionView);
+      });
+      legacyUpdateAllMarkdownViews.call(this);
+    };
+  }
 
   const legacyUnload = prototype.onunload;
   prototype.onunload = function (this: ProductionPlugin): void {

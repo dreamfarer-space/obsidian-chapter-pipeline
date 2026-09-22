@@ -526,6 +526,47 @@ test('Reading View renders the chapter pipeline, binds scroll, and reflects chap
   assert.ok(liveSession instanceof ChapterPipelinePlugin.ViewSession);
   assert.ok(liveSession.tracker instanceof ChapterPipelinePlugin.LivePreviewTracker);
   assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);
+
+  await liveHarness.plugin.attachStepperToView(liveHarness.view);
+  const replacementLiveSession = liveHarness.plugin.viewSessions?.get(liveHarness.view);
+  assert.ok(replacementLiveSession instanceof ChapterPipelinePlugin.ViewSession);
+  assert.notEqual(replacementLiveSession, liveSession);
+  assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);
+
+  liveHarness.plugin.onunload();
+  assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length ?? 0, 0);
+  assert.equal(liveHarness.plugin.viewSessions.size, 0);
+});
+
+test('typed sessions are disposed when Markdown views leave the workspace', async () => {
+  const harness = createReadingHarness();
+  await harness.plugin.attachStepperToView(harness.view);
+  assert.ok(harness.plugin.viewSessions?.has(harness.view));
+  assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
+
+  harness.app.workspace.getLeavesOfType = () => [];
+  harness.plugin.updateAllMarkdownViews();
+
+  assert.equal(harness.plugin.viewSessions?.has(harness.view), false);
+  assert.equal(harness.plugin.viewSessionVersions?.has(harness.view), false);
+  assert.equal(harness.scroller.listeners.get('scroll')?.length ?? 0, 0);
+});
+
+test('typed sessions keep the rendered per-view chapter snapshot during resume lookup', async () => {
+  const harness = createReadingHarness();
+  harness.plugin.settings.maxHeadingLevel = 1;
+  harness.plugin.settings.readingBookmarksEnabled = true;
+  const content = '# First\nbody\nbody\nbody\n## Second\nbody';
+  const allChapters = harness.plugin.extractAllChapters(content, harness.view.file);
+  assert.equal(allChapters.length, 2);
+  harness.plugin.settings.readingState = { files: { 'note.md': { markers: {}, resume: { chapterId: allChapters[1].id, title: allChapters[1].title, updatedAt: 1 } } } };
+
+  await harness.plugin.attachStepperToView(harness.view);
+  const session = harness.plugin.viewSessions?.get(harness.view);
+  assert.ok(session instanceof ChapterPipelinePlugin.ViewSession);
+  assert.equal(harness.container.querySelectorAll('.codex-dash-item').length, 1);
+  assert.equal(session.getChapters().length, 1);
+  assert.equal(session.getChapters()[0].level, 1);
 });
 
 test('Reading View active tracking handles mode aliases and ignores hidden editor state', async () => {
