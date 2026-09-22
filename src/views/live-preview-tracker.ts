@@ -75,7 +75,7 @@ export class LivePreviewTracker {
     });
   };
 
-  private isCandidateElement(value: unknown): value is Element {
+  private isCandidateElement(value: unknown): boolean {
     if (!value || typeof (value as Element).matches !== 'function') return false;
     return (value as Element).matches(CANDIDATE_SELECTOR);
   }
