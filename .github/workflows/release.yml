@@ -87,7 +87,7 @@ jobs:
         run: |
           mkdir -p dist/release
           cp main.js manifest.json styles.css dist/release/
-          (cd dist/release && zip -q "../charter-pipeline-$VERSION.zip" main.js manifest.json styles.css)
+          (cd dist/release && zip -q "../chapter-pipeline-$VERSION.zip" main.js manifest.json styles.css)
 
       - name: Verify required release files
         if: steps.existing.outputs.exists != 'true'
@@ -108,7 +108,7 @@ jobs:
             main.js \
             manifest.json \
             styles.css \
-            "dist/charter-pipeline-$VERSION.zip" \
+            "dist/chapter-pipeline-$VERSION.zip" \
             --target "$GITHUB_SHA" \
             --title "$TAG" \
             --generate-notes

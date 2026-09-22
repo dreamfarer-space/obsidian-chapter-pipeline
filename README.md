@@ -99,11 +99,11 @@ Charter Pipeline is being prepared for Obsidian Community Plugins. Until it is a
 
 ### Manual installation
 
-1. Download `charter-pipeline-<version>.zip` from the latest [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest), or download `main.js`, `manifest.json`, and `styles.css` separately.
+1. Download `chapter-pipeline-<version>.zip` from the latest [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest), or download `main.js`, `manifest.json`, and `styles.css` separately.
 2. Place the three plugin files in:
 
 ```text
-<YourVault>/.obsidian/plugins/charter-pipeline/
+<YourVault>/.obsidian/plugins/chapter-pipeline/
 ```
 
 3. Reload Obsidian and enable **Charter Pipeline** under **Settings → Community Plugins**.

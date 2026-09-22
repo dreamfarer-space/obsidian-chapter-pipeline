@@ -5,12 +5,12 @@ This document records the release decisions and the manual verification gate for
 ## Final plugin identity
 
 - Display name: `Charter Pipeline`
-- Plugin ID: `charter-pipeline`
+- Plugin ID: `chapter-pipeline`
 - Repository: `dreamfarer-space/obsidian-charter-pipeline`
 - Required release assets: `main.js`, `manifest.json`, `styles.css`
 - Release tag: exactly the version from `manifest.json` (for example `1.2.1`, with no `v` prefix)
 
-The plugin ID is intentionally finalized before the first Community Plugins release so users do not inherit a directory rename after installation.
+The plugin ID remains `chapter-pipeline` because it is the existing registered plugin identifier. Community Plugins submissions must keep that identifier stable.
 
 ## Compatibility declaration
 
