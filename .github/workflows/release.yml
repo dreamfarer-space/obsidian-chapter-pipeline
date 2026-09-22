@@ -1,0 +1,107 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - manifest.json
+      - package.json
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Resolve and validate version
+        id: version
+        shell: bash
+        run: |
+          VERSION="$(node -p "require('./manifest.json').version")"
+          PACKAGE_VERSION="$(node -p "require('./package.json').version")"
+          if [ "$VERSION" != "$PACKAGE_VERSION" ]; then
+            echo "manifest.json ($VERSION) and package.json ($PACKAGE_VERSION) versions differ" >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Check whether release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.existing.outputs.exists != 'true'
+        run: npm ci
+
+      - name: Audit dependencies
+        if: steps.existing.outputs.exists != 'true'
+        run: npm audit --audit-level=moderate
+
+      - name: Typecheck
+        if: steps.existing.outputs.exists != 'true'
+        run: npx --no-install tsc --noEmit
+
+      - name: Run tests
+        if: steps.existing.outputs.exists != 'true'
+        run: npm test
+
+      - name: Build production bundle
+        if: steps.existing.outputs.exists != 'true'
+        run: npm run build
+
+      - name: Verify generated bundle is committed
+        if: steps.existing.outputs.exists != 'true'
+        run: git diff --exit-code -- main.js
+
+      - name: Package plugin
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          mkdir -p dist/release
+          cp main.js manifest.json styles.css dist/release/
+          (cd dist/release && zip -q "../chapter-pipeline-$VERSION.zip" main.js manifest.json styles.css)
+
+      - name: Publish GitHub release
+        if: steps.existing.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        shell: bash
+        run: |
+          gh release create "$TAG" \
+            main.js \
+            manifest.json \
+            styles.css \
+            "dist/chapter-pipeline-$VERSION.zip" \
+            --target "$GITHUB_SHA" \
+            --title "$TAG" \
+            --generate-notes
