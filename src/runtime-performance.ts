@@ -173,8 +173,11 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     const targetView = view && view.file ? view : null;
     const line = typeof chapter === 'number' ? chapter : chapter?.line;
     const isReading = targetView && this.isReadingMode?.(targetView, targetView.contentEl);
-    const previewScroller = isReading
+    const previewRoot = isReading
       ? targetView.contentEl?.querySelector?.('.markdown-preview-view')
+      : null;
+    const previewScroller = isReading
+      ? (this.getViewScroller?.(targetView.contentEl, targetView) || previewRoot)
       : null;
 
     if (!targetView || line === undefined || !previewScroller) {
