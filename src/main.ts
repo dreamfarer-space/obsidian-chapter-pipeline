@@ -9,6 +9,7 @@ import { StepperView } from './ui/stepper';
 import { TooltipManager } from './ui/tooltip';
 import { ChapterSuggestModal as TypedChapterSuggestModal } from './ui/modal';
 import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './ui/settings-tab';
+import { applyRuntimePerformancePatches } from './runtime-performance';
 import type { ChapterNode } from './types';
 
 interface LegacyScrollBinding {
@@ -43,6 +44,8 @@ const LegacyPlugin = require('./legacy-main.js') as {
   SoundEngine?: typeof SoundEngine;
   updateHierarchyFolding?: typeof updateHierarchyFolding;
 };
+
+applyRuntimePerformancePatches(LegacyPlugin as never);
 
 /** Remove the compatibility renderer's scroll listener before typed tracking takes ownership. */
 function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {

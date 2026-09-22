@@ -88,13 +88,14 @@ A lightweight Web Audio synthesizer can provide subtle micro-switch feedback whe
 
 ## Installation
 
-### Community Plugins
+Charter Pipeline is being prepared for Obsidian Community Plugins. Until it is approved there, use BRAT or a manual GitHub Release install.
 
-If Charter Pipeline is available in your Obsidian Community Plugins browser:
+### BRAT
 
-1. Open **Settings → Community Plugins**.
-2. Search for **Charter Pipeline**.
-3. Install and enable it.
+1. Install and enable **BRAT** from Obsidian Community Plugins.
+2. In BRAT, choose **Add Beta plugin**.
+3. Enter `dreamfarer-space/obsidian-charter-pipeline` and add the plugin.
+4. Enable **Charter Pipeline** under **Settings → Community Plugins**.
 
 ### Manual installation
 
@@ -176,6 +177,7 @@ Architecture and implementation notes live in [`docs/`](docs/):
 - [`PHASE2_PERFORMANCE.md`](docs/PHASE2_PERFORMANCE.md) — performance work
 - [`PHASE3_COMPLIANCE_AUDIT.md`](docs/PHASE3_COMPLIANCE_AUDIT.md) — compliance and lifecycle audit
 - [`PHASE4_UI_UX.md`](docs/PHASE4_UI_UX.md) — UI/UX, motion, touch, and accessibility notes
+- [`COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) — release and compatibility checklist for Community Plugins submission
 
 ## Privacy
 

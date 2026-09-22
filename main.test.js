@@ -884,7 +884,7 @@ test('Settings load handles default fallbacks and preserves existing custom over
   assert.equal(plugin.settings.dockPosition, 'left');
   assert.equal(plugin.settings.hierarchyMode, 'hover-expand');
   assert.equal(plugin.settings.showProgressRail, false);
-  assert.equal(plugin.settings.tooltipGlassmorphism, true);
+  assert.equal(plugin.settings.tooltipGlassmorphism, false);
   assert.equal(plugin.settings.showChapterOrder, false);
   assert.equal(plugin.settings.readingBookmarksEnabled, false);
   assert.deepEqual(plugin.settings.readingState, { version: 1, files: {} });
@@ -947,7 +947,7 @@ test('ChapterPipelineSettingTab renders all controls and updates settings', asyn
   const glassSetting = Setting.instances.find(s => s.name.includes('Glassmorphism') || s.name.includes('毛玻璃'));
   assert.ok(glassSetting, 'tooltipGlassmorphism toggle setting should be rendered');
   const glassControl = glassSetting.controls[0];
-  assert.equal(glassControl.value, true);
+  assert.equal(glassControl.value, false);
   await glassControl.changeHandler(false);
   assert.equal(plugin.settings.tooltipGlassmorphism, false);
 
