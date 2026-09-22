@@ -6,7 +6,7 @@ on:
       - fix/issue-9-codemirror-virtualization
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -21,7 +21,13 @@ jobs:
       - run: npx --no-install tsc --noEmit
       - run: npm test
       - run: npm run build
-      - uses: actions/upload-artifact@v4
-        with:
-          name: issue9-main-js
-          path: main.js
+      - name: Commit production bundle
+        run: |
+          if git diff --quiet -- main.js; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.js
+          git commit -m "build: refresh production bundle"
+          git push origin HEAD:${GITHUB_REF_NAME}
