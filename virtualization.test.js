@@ -212,3 +212,47 @@ test('LivePreviewTracker resolves 1000+ chapters from viewport document lines wh
 
   tracker.dispose();
 });
+
+test('LivePreviewTracker prefers the editor viewport line and does not depend on rendered data-line anchors', () => {
+  const LivePreviewTracker = loadLivePreviewTracker();
+  const flushRaf = installRafHarness();
+  global.MutationObserver = FakeMutationObserver;
+  FakeMutationObserver.instances = [];
+
+  const container = new FakeContainer();
+  const chapters = makeChapters(1001, 100);
+  const active = [];
+  let viewportLine = 5050;
+  let geometryReads = 0;
+
+  // Deliberately misleading DOM state: when an editor viewport line is
+  // available, active chapter tracking should not query or measure it.
+  container.rendered = [makeRenderedLine(100, 0, () => { geometryReads += 1; })];
+
+  const tracker = new LivePreviewTracker({
+    container,
+    getViewportLine: () => viewportLine,
+    onActiveChapter(index) {
+      active.push(index);
+    },
+  });
+
+  tracker.setChapters(chapters);
+  flushRaf();
+  assert.equal(active.at(-1), 50);
+
+  viewportLine = 90050;
+  container.dispatch('scroll');
+  flushRaf();
+  assert.equal(active.at(-1), 900);
+
+  viewportLine = 20050;
+  container.dispatch('scroll');
+  flushRaf();
+  assert.equal(active.at(-1), 200);
+
+  assert.equal(container.queryCount, 0, 'editor viewport lines should bypass DOM candidate lookup');
+  assert.equal(geometryReads, 0, 'editor viewport lines should bypass DOM geometry reads');
+
+  tracker.dispose();
+});
