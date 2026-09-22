@@ -5,6 +5,8 @@ export interface ReadingTrackerOptions {
   findHeadings: (chapter: ChapterNode) => Element | null;
   onActiveChapter: (index: number) => void;
   onScrollTick?: () => void;
+  /** Set false when an existing renderer already established the initial UI state. */
+  trackImmediately?: boolean;
 }
 
 /** Reading View tracker with one passive listener and rAF coalescing. */
@@ -26,7 +28,7 @@ export class ReadingViewTracker {
     this.chapters = chapters;
     this.headingCache = new Array(chapters.length);
     this.lastActiveIndex = -1;
-    this.schedule();
+    if (this.options.trackImmediately !== false) this.schedule();
   }
 
   private readonly handleScroll = (): void => {
