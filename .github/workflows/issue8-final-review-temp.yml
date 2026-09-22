@@ -1,0 +1,100 @@
+name: Issue 8 final review fixer
+
+on:
+  push:
+    paths:
+      - '.github/workflows/issue8-final-review-temp.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-8-view-sessions
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Add final review coverage and docs
+        shell: python
+        run: |
+          from pathlib import Path
+
+          main_ts = Path('src/main.ts')
+          text = main_ts.read_text()
+          replacements = {
+              "function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {": """/** Remove the compatibility renderer's scroll listener before typed tracking takes ownership. */
+          function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {""",
+              "function installTypedProductionSessions(): void {": """/** Install typed per-view session ownership onto the legacy coordinator exactly once. */
+          function installTypedProductionSessions(): void {""",
+              "  const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {": """  /** Attach one generation-guarded typed session after the compatibility renderer finishes. */
+            const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {""",
+          }
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'missing src/main.ts marker: {old}')
+              text = text.replace(old, new, 1)
+          main_ts.write_text(text)
+
+          test_path = Path('main.test.js')
+          tests = test_path.read_text()
+          marker = "test('typed sessions keep the rendered per-view chapter snapshot during resume lookup', async () => {"
+          if marker not in tests:
+              raise SystemExit('missing main.test.js insertion marker')
+          addition = r"""test('concurrent typed attachment keeps only the newest reverse-completing session', async () => {
+            const harness = createReadingHarness();
+            const pendingReads = [];
+            harness.app.vault.cachedRead = () => new Promise((resolve) => pendingReads.push(resolve));
+
+            const firstAttach = harness.plugin.attachStepperToView(harness.view);
+            const secondAttach = harness.plugin.attachStepperToView(harness.view);
+            assert.equal(pendingReads.length, 2);
+
+            const content = '# First\nbody\nbody\nbody\n## Second\nbody';
+            pendingReads[1](content);
+            await secondAttach;
+            const newestSession = harness.plugin.viewSessions?.get(harness.view);
+            assert.ok(newestSession instanceof ChapterPipelinePlugin.ViewSession);
+            assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
+            assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
+
+            pendingReads[0](content);
+            await firstAttach;
+
+            assert.equal(harness.plugin.viewSessions?.get(harness.view), newestSession);
+            assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
+            assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
+          });
+
+          """
+          tests = tests.replace(marker, addition + marker, 1)
+          test_path.write_text(tests)
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx --no-install tsc --noEmit
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Run tests
+        run: npm test
+
+      - name: Commit validated changes
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/main.ts main.test.js main.js
+          git diff --cached --quiet && exit 0
+          git commit -m "test: cover concurrent typed session attachment"
+          git push origin HEAD:refactor/issue-8-view-sessions
