@@ -19,16 +19,12 @@ jobs:
         with:
           node-version: 24
           cache: npm
-      - name: Restore established plugin ID everywhere
+      - name: Restore established plugin ID in docs
         shell: bash
         run: |
           python - <<'PY'
           from pathlib import Path
-
           replacements = {
-            '.github/workflows/release.yml': [
-              ('charter-pipeline-$VERSION.zip', 'chapter-pipeline-$VERSION.zip'),
-            ],
             'README.md': [
               ('`charter-pipeline-<version>.zip`', '`chapter-pipeline-<version>.zip`'),
               ('/.obsidian/plugins/charter-pipeline/', '/.obsidian/plugins/chapter-pipeline/'),
@@ -42,7 +38,6 @@ jobs:
               ('The plugin ID is intentionally finalized before the first Community Plugins release so users do not inherit a directory rename after installation.', 'The plugin ID remains `chapter-pipeline` because it is the existing registered plugin identifier. Community Plugins submissions must keep that identifier stable.'),
             ],
           }
-
           for filename, pairs in replacements.items():
             path = Path(filename)
             text = path.read_text()
@@ -51,10 +46,6 @@ jobs:
                 raise SystemExit(f'missing expected text in {filename}: {old}')
               text = text.replace(old, new)
             path.write_text(text)
-
-          manifest = Path('manifest.json').read_text()
-          if '"id": "chapter-pipeline"' not in manifest:
-            raise SystemExit('manifest id is not chapter-pipeline')
           PY
       - run: npm ci
       - run: npx --no-install tsc --noEmit
@@ -69,12 +60,11 @@ jobs:
           grep -Fq '.obsidian/plugins/chapter-pipeline/' README.zh-CN.md
           grep -Fq 'Plugin ID: `chapter-pipeline`' docs/COMMUNITY_SUBMISSION.md
           git diff --exit-code -- main.js
-      - name: Commit fix and remove helper workflow
+      - name: Commit documentation fix
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git rm .github/workflows/fix-community-plugin-id.yml
-          git add manifest.json .github/workflows/release.yml README.md README.zh-CN.md docs/COMMUNITY_SUBMISSION.md
-          git commit -m "fix: preserve existing Obsidian plugin id"
+          git add README.md README.zh-CN.md docs/COMMUNITY_SUBMISSION.md
+          git commit -m "docs: align install paths with existing plugin id"
           git push origin HEAD:fix/community-plugin-id
