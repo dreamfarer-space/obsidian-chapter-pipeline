@@ -146,16 +146,16 @@ function installTypedProductionSessions(): void {
         }
 
         if (previousIndex >= 0 && previousIndex !== index) {
-          if (this.settings?.enableSound !== false) {
-            const volume = typeof this.settings?.soundVolume === 'number' ? this.settings.soundVolume : 50;
-            this.soundEngine?.playScrollTick?.(volume);
-          }
+          const volume = typeof this.settings?.soundVolume === 'number' ? this.settings.soundVolume : 50;
+          this.soundEngine?.playScrollTick?.(volume);
           this.recordReadingPosition?.(view, chapters[index]);
         }
       },
     });
 
-    if (this.viewSessionVersions.get(view) !== sessionVersion || typedView.contentEl !== container) {
+    const markdownLeaves = this.app?.workspace?.getLeavesOfType?.('markdown');
+    const isMounted = markdownLeaves === undefined || markdownLeaves.some((leaf) => leaf?.view === view);
+    if (this.viewSessionVersions.get(view) !== sessionVersion || typedView.contentEl !== container || !isMounted) {
       session.dispose();
       return;
     }

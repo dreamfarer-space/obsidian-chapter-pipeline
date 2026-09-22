@@ -577,6 +577,39 @@ test('concurrent typed attachment keeps only the newest reverse-completing sessi
   assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
 });
 
+test('typed scroll ticks delegate independently of tactile click sound setting', async () => {
+  const harness = createReadingHarness();
+  harness.plugin.settings.enableSound = false;
+  harness.plugin.settings.enableScrollSound = true;
+  let scrollTicks = 0;
+  harness.plugin.soundEngine.playScrollTick = () => { scrollTicks += 1; };
+
+  await harness.plugin.attachStepperToView(harness.view);
+  harness.scroller.scrollTop = 1;
+  harness.scroller.dispatch('scroll');
+  assert.equal(scrollTicks, 0);
+
+  harness.scroller.scrollTop = 400;
+  harness.scroller.dispatch('scroll');
+  assert.equal(scrollTicks, 1);
+});
+
+test('typed attachment discards a session when the view closes during cachedRead', async () => {
+  const harness = createReadingHarness();
+  let resolveRead;
+  harness.app.vault.cachedRead = () => new Promise((resolve) => { resolveRead = resolve; });
+
+  const attach = harness.plugin.attachStepperToView(harness.view);
+  harness.app.workspace.getLeavesOfType = () => [];
+  resolveRead('# First\nbody\nbody\nbody\n## Second\nbody');
+  await attach;
+
+  assert.equal(harness.plugin.viewSessions?.has(harness.view), false);
+  assert.equal(harness.scroller.listeners.get('scroll')?.length ?? 0, 0);
+  assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
+  assert.equal(harness.container.querySelector('.codex-stepper-container'), null);
+});
+
 test('typed sessions keep the rendered per-view chapter snapshot during resume lookup', async () => {
   const harness = createReadingHarness();
   harness.plugin.settings.maxHeadingLevel = 1;
