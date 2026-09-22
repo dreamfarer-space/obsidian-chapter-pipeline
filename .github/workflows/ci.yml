@@ -44,5 +44,12 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Reject production Pro/debug branding
+        run: |
+          if grep -Fq "Charter Pipeline Pro" main.js; then
+            echo "Production bundle still contains legacy Pro branding" >&2
+            exit 1
+          fi
+
       - name: Verify generated bundle is committed
         run: git diff --exit-code -- main.js
