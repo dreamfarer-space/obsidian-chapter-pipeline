@@ -149,11 +149,21 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     return originalExtractChapters.call(this, content, file, parserSettings);
   };
 
+  const originalAttachStepperToView = proto.attachStepperToView;
+  proto.attachStepperToView = async function patchedAttachStepperToView(view: any) {
+    const result = await originalAttachStepperToView.call(this, view);
+    const tooltip = this.viewTooltips?.get?.(view);
+    if (tooltip?.style) {
+      // A plugin-local layer above note content without dominating app chrome,
+      // menus, modals, or other global overlays.
+      tooltip.style.zIndex = '200';
+    }
+    return result;
+  };
+
   const originalJumpToHeading = proto.jumpToHeading;
   proto.jumpToHeading = function patchedJumpToHeading(view: any, chapter: any) {
-    const targetView = (view && view.file)
-      ? view
-      : this.app?.workspace?.getActiveViewOfType?.(undefined);
+    const targetView = view && view.file ? view : null;
     const line = typeof chapter === 'number' ? chapter : chapter?.line;
     const isReading = targetView && this.isReadingMode?.(targetView, targetView.contentEl);
     const previewScroller = isReading
