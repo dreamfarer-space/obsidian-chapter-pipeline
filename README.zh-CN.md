@@ -99,11 +99,11 @@ Charter Pipeline 正在准备提交 Obsidian 社区插件市场。在正式通�
 
 ### 手动安装
 
-1. 从最新 [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest) 下载 `charter-pipeline-<version>.zip`，也可以分别下载 `main.js`、`manifest.json`、`styles.css`。
+1. 从最新 [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest) 下载 `chapter-pipeline-<version>.zip`，也可以分别下载 `main.js`、`manifest.json`、`styles.css`。
 2. 将三个插件文件放入：
 
 ```text
-<你的仓库>/.obsidian/plugins/charter-pipeline/
+<你的仓库>/.obsidian/plugins/chapter-pipeline/
 ```
 
 3. 重载 Obsidian，然后在 **设置 → 第三方插件** 中启用 **Charter Pipeline**。
