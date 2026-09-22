@@ -88,8 +88,8 @@ function installTypedProductionSessions(): void {
     const tooltipElement = this.viewTooltips?.get(view) ?? null;
     const isReading = this.isReadingMode?.(view, container) === true;
     const scroller = isReading
-      ? (container.querySelector('.markdown-preview-view') as HTMLElement | null) ?? this.getViewScroller?.(container, view) ?? null
-      : (container.querySelector('.cm-scroller') as HTMLElement | null) ?? this.getViewScroller?.(container, view) ?? null;
+      ? this.getViewScroller?.(container, view) ?? (container.querySelector('.markdown-preview-view') as HTMLElement | null)
+      : this.getViewScroller?.(container, view) ?? (container.querySelector('.cm-scroller') as HTMLElement | null);
 
     if (!scroller) return;
 
