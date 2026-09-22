@@ -1,0 +1,35 @@
+language: en-US
+
+early_access: false
+
+reviews:
+  profile: assertive
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - '!main.js'
+    - '!package-lock.json'
+    - '!assets/**'
+  path_instructions:
+    - path: 'src/**'
+      instructions: |
+        Prioritize correctness regressions, Obsidian lifecycle leaks, stale event listeners,
+        unsafe DOM behavior, and performance regressions on large notes. Treat src/ as the
+        source of truth; main.js is generated and should not receive duplicate review findings.
+    - path: 'main.test.js'
+      instructions: |
+        Check whether tests cover behavior changes and edge cases introduced by src/ changes.
+        Prefer concrete missing-regression-test findings over style comments.
+    - path: '.github/workflows/**'
+      instructions: |
+        Review permissions, event triggers, fork-safety, secret handling, action pinning/versioning,
+        and whether failures correctly gate pull requests.
+
+chat:
+  auto_reply: true
