@@ -23,8 +23,9 @@ interface ProductionPlugin {
   scrollBindings?: Map<unknown, LegacyScrollBinding>;
   viewSessions?: Map<object, ViewSession>;
   viewSessionVersions?: Map<object, number>;
-  viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
+  chapterSnapshotsByFile?: WeakMap<object, ChapterNode[]>;
   viewTooltips?: Map<object, HTMLElement>;
+  extractChapters?: (content: string, file: object, settings?: unknown) => ChapterNode[];
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
   getViewScroller?: (container: HTMLElement, view: object) => HTMLElement | null;
   isReadingMode?: (view: object, container?: HTMLElement | null) => boolean;
@@ -61,6 +62,26 @@ function installTypedProductionSessions(): void {
   const legacyAttach = prototype.attachStepperToView;
   if (!legacyAttach || (legacyAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled) return;
 
+  // The compatibility renderer reads the vault and parses chapters internally.
+  // Capture that exact parse result by file so the typed session can reuse it
+  // without triggering a second read/parse or racing concurrent reattachments.
+  const legacyExtractChapters = prototype.extractChapters;
+  if (legacyExtractChapters) {
+    prototype.extractChapters = function (
+      this: ProductionPlugin,
+      content: string,
+      file: object,
+      settings?: unknown,
+    ): ChapterNode[] {
+      const chapters = legacyExtractChapters.call(this, content, file, settings);
+      if (file && typeof file === 'object') {
+        this.chapterSnapshotsByFile ??= new WeakMap<object, ChapterNode[]>();
+        this.chapterSnapshotsByFile.set(file, chapters);
+      }
+      return chapters;
+    };
+  }
+
   const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
     this.viewSessions ??= new Map<object, ViewSession>();
     this.viewSessionVersions ??= new Map<object, number>();
@@ -75,14 +96,13 @@ function installTypedProductionSessions(): void {
 
     const typedView = view as { contentEl?: HTMLElement; file?: unknown };
     const container = typedView?.contentEl;
-    if (!container || !typedView.file) return;
+    if (!container || !typedView.file || typeof typedView.file !== 'object') return;
 
     const stepperElement = container.querySelector('.codex-stepper-container') as HTMLElement | null;
     if (!stepperElement) return;
 
-    // The compatibility renderer parses the document while rendering. Reuse
-    // exactly that chapter snapshot so the typed session adds no second vault read.
-    const chapters = this.viewChapterSnapshots?.get(view) ?? [];
+    // Reuse the exact chapter snapshot parsed by the compatibility renderer.
+    const chapters = this.chapterSnapshotsByFile?.get(typedView.file as object) ?? [];
     if (!chapters.length) return;
 
     const dashElements = Array.from(container.querySelectorAll('.codex-dash-item')) as HTMLElement[];
