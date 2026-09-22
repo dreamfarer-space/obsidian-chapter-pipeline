@@ -23,6 +23,7 @@ interface ProductionPlugin {
   scrollBindings?: Map<unknown, LegacyScrollBinding>;
   viewSessions?: Map<object, ViewSession>;
   viewSessionVersions?: Map<object, number>;
+  viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
   viewTooltips?: Map<object, HTMLElement>;
   getChaptersForView?: (view: object) => Promise<ChapterNode[]>;
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
@@ -56,10 +57,23 @@ function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElem
 function installTypedProductionSessions(): void {
   const prototype = LegacyPlugin.prototype as ProductionPlugin & {
     attachStepperToView?: (view: object) => Promise<void>;
+    getChaptersForView?: (view: object) => Promise<ChapterNode[]>;
     onunload?: () => void;
   };
   const legacyAttach = prototype.attachStepperToView;
   if (!legacyAttach || (legacyAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled) return;
+
+  const legacyGetChapters = prototype.getChaptersForView;
+  if (legacyGetChapters && !(legacyGetChapters as { __typedSnapshotInstalled?: boolean }).__typedSnapshotInstalled) {
+    const snapshottingGetChapters = async function (this: ProductionPlugin, view: object): Promise<ChapterNode[]> {
+      const chapters = await legacyGetChapters.call(this, view);
+      this.viewChapterSnapshots ??= new WeakMap<object, ChapterNode[]>();
+      this.viewChapterSnapshots.set(view, chapters);
+      return chapters;
+    };
+    (snapshottingGetChapters as { __typedSnapshotInstalled?: boolean }).__typedSnapshotInstalled = true;
+    prototype.getChaptersForView = snapshottingGetChapters;
+  }
 
   const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
     this.viewSessions ??= new Map<object, ViewSession>();
@@ -75,13 +89,12 @@ function installTypedProductionSessions(): void {
 
     const typedView = view as { contentEl?: HTMLElement; file?: unknown };
     const container = typedView?.contentEl;
-    if (!container || !typedView.file || !this.getChaptersForView) return;
+    if (!container || !typedView.file) return;
 
     const stepperElement = container.querySelector('.codex-stepper-container') as HTMLElement | null;
     if (!stepperElement) return;
 
-    const chapters = await this.getChaptersForView(view);
-    if (this.viewSessionVersions.get(view) !== sessionVersion || typedView.contentEl !== container) return;
+    const chapters = this.viewChapterSnapshots?.get(view) ?? [];
     if (!chapters.length) return;
 
     const dashElements = Array.from(container.querySelectorAll('.codex-dash-item')) as HTMLElement[];
