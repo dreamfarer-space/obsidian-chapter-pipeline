@@ -69,8 +69,6 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx --no-install tsc --noEmit
-      - name: Test source changes
-        run: npm test
       - name: Build production bundle
         run: npm run build
       - name: Test built bundle
