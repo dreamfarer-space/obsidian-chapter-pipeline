@@ -144,7 +144,29 @@ class FakeMutationObserver {
 
   observe() {}
   disconnect() {}
-  trigger() { this.callback([]); }
+  trigger(records) { this.callback(records); }
+}
+
+function makeRenderedCandidate(chapter, index, container, onGeometryRead) {
+  const element = {
+    getAttribute(name) {
+      return name === 'data-line' ? String(chapter.line) : null;
+    },
+    getBoundingClientRect() {
+      onGeometryRead();
+      return { top: index * 40 - container.scrollTop };
+    },
+    matches(selector) {
+      return selector === '.cm-line, .cm-heading';
+    },
+    closest(selector) {
+      return selector === '.cm-line, .cm-heading' ? element : null;
+    },
+    querySelector() {
+      return null;
+    },
+  };
+  return element;
 }
 
 test('LivePreviewTracker reuses rendered candidates and binary-searches 1000 headings', () => {
@@ -157,15 +179,12 @@ test('LivePreviewTracker reuses rendered candidates and binary-searches 1000 hea
   let geometryReads = 0;
   const active = [];
 
-  container.rendered = chapters.map((chapter, index) => ({
-    getAttribute(name) {
-      return name === 'data-line' ? String(chapter.line) : null;
-    },
-    getBoundingClientRect() {
-      geometryReads += 1;
-      return { top: index * 40 - container.scrollTop };
-    },
-  }));
+  container.rendered = chapters.map((chapter, index) => makeRenderedCandidate(
+    chapter,
+    index,
+    container,
+    () => { geometryReads += 1; },
+  ));
 
   const tracker = new ChapterPipelinePlugin.LivePreviewTracker({
     container,
@@ -188,8 +207,45 @@ test('LivePreviewTracker reuses rendered candidates and binary-searches 1000 hea
   assert.equal(active.at(-1), 101);
   assert.ok(geometryReads < 2500, `expected logarithmic geometry reads < 2500, got ${geometryReads}`);
 
-  FakeMutationObserver.instances[0].trigger();
+  const observer = FakeMutationObserver.instances[0];
+  const unrelatedTarget = {
+    matches() { return false; },
+    closest() { return null; },
+    querySelector() { return null; },
+  };
+
+  observer.trigger([{
+    type: 'childList',
+    target: unrelatedTarget,
+    addedNodes: [],
+    removedNodes: [],
+  }]);
   flushRaf();
-  assert.equal(container.queryCount, 2, 'DOM mutation should invalidate the rendered candidate cache once');
+  assert.equal(container.queryCount, 1, 'unrelated subtree mutations should not invalidate candidates');
+
+  const candidate = container.rendered[100];
+  observer.trigger([{
+    type: 'childList',
+    target: candidate,
+    addedNodes: [{}],
+    removedNodes: [],
+  }]);
+  flushRaf();
+  assert.equal(container.queryCount, 1, 'content changes inside a candidate should only refresh geometry');
+
+  const addedCandidate = {
+    matches(selector) { return selector === '.cm-line, .cm-heading'; },
+    closest() { return null; },
+    querySelector() { return null; },
+  };
+  observer.trigger([{
+    type: 'childList',
+    target: unrelatedTarget,
+    addedNodes: [addedCandidate],
+    removedNodes: [],
+  }]);
+  flushRaf();
+  assert.equal(container.queryCount, 2, 'candidate additions should invalidate the rendered candidate cache once');
+
   tracker.dispose();
 });
