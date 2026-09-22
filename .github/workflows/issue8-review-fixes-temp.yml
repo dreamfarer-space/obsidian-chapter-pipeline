@@ -1,0 +1,120 @@
+name: Issue 8 review fixes (temporary)
+
+on:
+  push:
+    branches:
+      - refactor/issue-8-view-sessions
+    paths:
+      - .github/workflows/issue8-review-fixes-temp.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-review-fixes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-8-view-sessions
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Apply targeted review fixes
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(text: str, old: str, new: str, label: str) -> str:
+              if old not in text:
+                  raise SystemExit(f'missing expected block: {label}')
+              return text.replace(old, new, 1)
+
+          main_path = Path('src/main.ts')
+          text = main_path.read_text()
+
+          text = replace_once(
+              text,
+              """  viewSessions?: Map<object, ViewSession>;\n  viewSessionVersions?: Map<object, number>;\n  chapterSnapshotsByFile?: WeakMap<object, ChapterNode[]>;\n  viewTooltips?: Map<object, HTMLElement>;\n  extractChapters?: (content: string, file: object, settings?: unknown) => ChapterNode[];\n""",
+              """  viewSessions?: Map<object, ViewSession>;\n  viewSessionVersions?: Map<object, number>;\n  viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;\n  viewTooltips?: Map<object, HTMLElement>;\n  app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };\n""",
+              'production plugin snapshot fields',
+          )
+
+          text = replace_once(
+              text,
+              """    attachStepperToView?: (view: object) => Promise<void>;\n    onunload?: () => void;\n""",
+              """    attachStepperToView?: (view: object) => Promise<void>;\n    updateAllMarkdownViews?: () => void;\n    onunload?: () => void;\n""",
+              'prototype method surface',
+          )
+
+          text = replace_once(
+              text,
+              """  // The compatibility renderer reads the vault and parses chapters internally.\n  // Capture that exact parse result by file so the typed session can reuse it\n  // without triggering a second read/parse or racing concurrent reattachments.\n  const legacyExtractChapters = prototype.extractChapters;\n  if (legacyExtractChapters) {\n    prototype.extractChapters = function (\n      this: ProductionPlugin,\n      content: string,\n      file: object,\n      settings?: unknown,\n    ): ChapterNode[] {\n      const chapters = legacyExtractChapters.call(this, content, file, settings);\n      if (file && typeof file === 'object') {\n        this.chapterSnapshotsByFile ??= new WeakMap<object, ChapterNode[]>();\n        this.chapterSnapshotsByFile.set(file, chapters);\n      }\n      return chapters;\n    };\n  }\n\n""",
+              "",
+              'file-keyed chapter snapshot wrapper',
+          )
+
+          text = replace_once(
+              text,
+              """    // Reuse the exact chapter snapshot parsed by the compatibility renderer.\n    const chapters = this.chapterSnapshotsByFile?.get(typedView.file as object) ?? [];\n""",
+              """    // Reuse the exact per-view chapter snapshot that produced the adopted dash DOM.\n    // This avoids a second read/parse and cannot be overwritten by resume lookups\n    // that intentionally parse a wider heading range.\n    const chapters = this.viewChapterSnapshots?.get(view) ?? [];\n""",
+              'typed session snapshot read',
+          )
+
+          text = replace_once(
+              text,
+              """  (typedAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled = true;\n  prototype.attachStepperToView = typedAttach;\n\n  const legacyUnload = prototype.onunload;\n""",
+              """  (typedAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled = true;\n  prototype.attachStepperToView = typedAttach;\n\n  const legacyUpdateAllMarkdownViews = prototype.updateAllMarkdownViews;\n  if (legacyUpdateAllMarkdownViews) {\n    prototype.updateAllMarkdownViews = function (this: ProductionPlugin): void {\n      const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];\n      const mountedViews = new Set<object>();\n      leaves.forEach((leaf) => {\n        if (leaf?.view && typeof leaf.view === 'object') mountedViews.add(leaf.view);\n      });\n\n      this.viewSessions?.forEach((session, sessionView) => {\n        if (mountedViews.has(sessionView)) return;\n        session.dispose();\n        this.viewSessions?.delete(sessionView);\n        this.viewSessionVersions?.delete(sessionView);\n      });\n\n      legacyUpdateAllMarkdownViews.call(this);\n    };\n  }\n\n  const legacyUnload = prototype.onunload;\n""",
+              'stale view session cleanup wrapper',
+          )
+
+          main_path.write_text(text)
+
+          test_path = Path('main.test.js')
+          tests = test_path.read_text()
+
+          tests = replace_once(
+              tests,
+              """  const liveSession = liveHarness.plugin.viewSessions?.get(liveHarness.view);\n  assert.ok(liveSession instanceof ChapterPipelinePlugin.ViewSession);\n  assert.ok(liveSession.tracker instanceof ChapterPipelinePlugin.LivePreviewTracker);\n  assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);\n});\n\n""",
+              """  const liveSession = liveHarness.plugin.viewSessions?.get(liveHarness.view);\n  assert.ok(liveSession instanceof ChapterPipelinePlugin.ViewSession);\n  assert.ok(liveSession.tracker instanceof ChapterPipelinePlugin.LivePreviewTracker);\n  assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);\n\n  await liveHarness.plugin.attachStepperToView(liveHarness.view);\n  const replacementLiveSession = liveHarness.plugin.viewSessions?.get(liveHarness.view);\n  assert.ok(replacementLiveSession instanceof ChapterPipelinePlugin.ViewSession);\n  assert.notEqual(replacementLiveSession, liveSession);\n  assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);\n\n  liveHarness.plugin.onunload();\n  assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length ?? 0, 0);\n  assert.equal(liveHarness.plugin.viewSessions.size, 0);\n});\n\n""",
+              'reattach and unload lifecycle coverage',
+          )
+
+          anchor = """test('Reading View active tracking handles mode aliases and ignores hidden editor state', async () => {\n"""
+          additions = """test('typed sessions are disposed when Markdown views leave the workspace', async () => {\n  const harness = createReadingHarness();\n  await harness.plugin.attachStepperToView(harness.view);\n  assert.ok(harness.plugin.viewSessions?.has(harness.view));\n  assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);\n\n  harness.app.workspace.getLeavesOfType = () => [];\n  harness.plugin.updateAllMarkdownViews();\n\n  assert.equal(harness.plugin.viewSessions?.has(harness.view), false);\n  assert.equal(harness.plugin.viewSessionVersions?.has(harness.view), false);\n  assert.equal(harness.scroller.listeners.get('scroll')?.length ?? 0, 0);\n});\n\ntest('typed sessions keep the rendered per-view chapter snapshot during resume lookup', async () => {\n  const harness = createReadingHarness();\n  harness.plugin.settings.maxHeadingLevel = 1;\n  harness.plugin.settings.readingBookmarksEnabled = true;\n\n  const content = '# First\\nbody\\nbody\\nbody\\n## Second\\nbody';\n  const allChapters = harness.plugin.extractAllChapters(content, harness.view.file);\n  assert.equal(allChapters.length, 2);\n  harness.plugin.settings.readingState = {\n    files: {\n      'note.md': {\n        markers: {},\n        resume: {\n          chapterId: allChapters[1].id,\n          title: allChapters[1].title,\n          updatedAt: 1,\n        },\n      },\n    },\n  };\n\n  await harness.plugin.attachStepperToView(harness.view);\n  const session = harness.plugin.viewSessions?.get(harness.view);\n  assert.ok(session instanceof ChapterPipelinePlugin.ViewSession);\n  assert.equal(harness.container.querySelectorAll('.codex-dash-item').length, 1);\n  assert.equal(session.getChapters().length, 1);\n  assert.equal(session.getChapters()[0].level, 1);\n});\n\n"""
+          tests = replace_once(tests, anchor, additions + anchor, 'new lifecycle/cache regression tests')
+          test_path.write_text(tests)
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Re-run tests against committed bundle
+        run: npm test
+
+      - name: Commit fixes and generated bundle
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.ts main.test.js main.js
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+            exit 0
+          fi
+          git commit -m "fix: address typed session review feedback"
+          git push origin HEAD:refactor/issue-8-view-sessions
