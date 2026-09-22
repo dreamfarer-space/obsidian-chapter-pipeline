@@ -8,6 +8,7 @@ import { StepperView } from './ui/stepper';
 import { TooltipManager } from './ui/tooltip';
 import { ChapterSuggestModal as TypedChapterSuggestModal } from './ui/modal';
 import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './ui/settings-tab';
+import { applyRuntimePerformancePatches } from './runtime-performance';
 
 // The legacy coordinator is intentionally kept as a compatibility boundary while
 // view and UI responsibilities move into the typed modules above. Keeping this
@@ -16,10 +17,13 @@ import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './u
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const LegacyPlugin = require('./legacy-main.js') as {
   new (...args: unknown[]): unknown;
+  prototype: Record<string, unknown>;
   ChapterParser?: typeof ChapterParser;
   SoundEngine?: typeof SoundEngine;
   updateHierarchyFolding?: typeof updateHierarchyFolding;
 };
+
+applyRuntimePerformancePatches(LegacyPlugin as never);
 
 LegacyPlugin.ChapterParser = ChapterParser;
 LegacyPlugin.SoundEngine = SoundEngine;
