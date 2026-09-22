@@ -69,10 +69,13 @@ export class LivePreviewTracker {
 
   private readonly schedule = (): void => {
     if (this.frame !== null || this.disposed) return;
-    this.frame = requestAnimationFrame(() => {
+    let executedSynchronously = false;
+    const frame = requestAnimationFrame(() => {
+      executedSynchronously = true;
       this.frame = null;
       this.update();
     });
+    this.frame = executedSynchronously ? null : frame;
   };
 
   private isCandidateElement(value: unknown): boolean {
