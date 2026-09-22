@@ -7,11 +7,11 @@
 
 <br/>
 
-[![GitHub Release](https://img.shields.io/github/v/release/LeaningLearner/obsidian-charter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/LeaningLearner/obsidian-charter-pipeline/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/LeaningLearner/obsidian-charter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/LeaningLearner/obsidian-charter-pipeline/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-charter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-charter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases)
 [![Obsidian MinApp](https://img.shields.io/badge/Obsidian-%E2%89%A5%200.15.0-7c3aed?style=flat-square&logo=obsidian)](https://obsidian.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
-[![Author](https://img.shields.io/badge/Author-%E6%8B%A9%E6%A2%A6%E8%88%9F-blue?style=flat-square)](https://github.com/LeaningLearner)
+[![Author](https://img.shields.io/badge/Author-%E6%8B%A9%E6%A2%A6%E8%88%9F-blue?style=flat-square)](https://github.com/dreamfarer-space)
 
 <br/>
 
@@ -144,7 +144,7 @@ Charter Pipeline provides commands that you can bind to custom hotkeys in **Sett
 3. Click **Install**, then **Enable**.
 
 #### 2. Manual Installation
-1. Download `main.js`, `manifest.json`, and `styles.css` from the latest [Release](https://github.com/LeaningLearner/obsidian-charter-pipeline/releases).
+1. Download `main.js`, `manifest.json`, and `styles.css` from the latest [Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases).
 2. Extract or copy the files into `<YourVault>/.obsidian/plugins/chapter-pipeline/`.
 3. Reload Obsidian (`Ctrl + R`) and enable **Charter Pipeline** in **Settings -> Community Plugins**.
 
@@ -278,7 +278,7 @@ Charter Pipeline provides commands that you can bind to custom hotkeys in **Sett
 3. 点击 **安装**，随后点击 **启用** 即可。
 
 #### 2. 手动安装
-1. 前往本仓库 [Releases 页面](https://github.com/LeaningLearner/obsidian-charter-pipeline/releases) 下载 `main.js`、`manifest.json` 与 `styles.css`；
+1. 前往本仓库 [Releases 页面](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases) 下载 `main.js`、`manifest.json` 与 `styles.css`；
 2. 将这三个文件放置于笔记库的 `.obsidian/plugins/chapter-pipeline/` 目录下；
 3. 在 Obsidian 中按 `Ctrl + R` 刷新，并在 **设置 -> 第三方插件** 中启用。
 
@@ -306,4 +306,4 @@ Charter Pipeline provides commands that you can bind to custom hotkeys in **Sett
 ## 📄 License / 开源协议
 
 本项目基于 [MIT License](LICENSE) 开源。  
-Copyright (c) 2026 [择梦舟 (LeaningLearner)](https://github.com/LeaningLearner)
+Copyright (c) 2026 [择梦舟 (dreamfarer-space)](https://github.com/dreamfarer-space)

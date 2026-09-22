@@ -23,12 +23,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/LeaningLearner/obsidian-charter-pipeline.git"
+    "url": "git+https://github.com/dreamfarer-space/obsidian-charter-pipeline.git"
   },
   "bugs": {
-    "url": "https://github.com/LeaningLearner/obsidian-charter-pipeline/issues"
+    "url": "https://github.com/dreamfarer-space/obsidian-charter-pipeline/issues"
   },
-  "homepage": "https://github.com/LeaningLearner/obsidian-charter-pipeline#readme",
+  "homepage": "https://github.com/dreamfarer-space/obsidian-charter-pipeline#readme",
   "devDependencies": {
     "@types/node": "^26.6.2",
     "esbuild": "^0.28.2",
