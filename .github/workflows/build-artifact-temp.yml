@@ -20,6 +20,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      - name: Build latest production bundle before integration tests
+        run: npm run build
       - name: Add production session integration assertions
         run: |
           python - <<'PY'
@@ -51,7 +53,6 @@ jobs:
             echo "npm test exit status: $status"
             exit "$status"
           fi
-      - run: npm run build
       - name: Commit integration tests and generated bundle when changed
         run: |
           if git diff --quiet -- main.test.js main.js; then
