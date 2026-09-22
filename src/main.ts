@@ -17,6 +17,10 @@ interface LegacyScrollBinding {
   handler?: (...args: unknown[]) => void;
 }
 
+type SnapshottingGetChapters = ((view: object) => Promise<ChapterNode[]>) & {
+  __typedSnapshotInstalled?: boolean;
+};
+
 interface ProductionPlugin {
   settings?: Record<string, unknown>;
   soundEngine?: { playScrollTick?: (volume: number) => void };
@@ -25,7 +29,7 @@ interface ProductionPlugin {
   viewSessionVersions?: Map<object, number>;
   viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
   viewTooltips?: Map<object, HTMLElement>;
-  getChaptersForView?: (view: object) => Promise<ChapterNode[]>;
+  getChaptersForView?: SnapshottingGetChapters;
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
   getViewScroller?: (container: HTMLElement, view: object) => HTMLElement | null;
   isReadingMode?: (view: object, container?: HTMLElement | null) => boolean;
@@ -54,28 +58,30 @@ function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElem
   plugin.scrollBindings?.delete(container);
 }
 
+function ensureChapterSnapshotting(plugin: ProductionPlugin): void {
+  const current = plugin.getChaptersForView;
+  if (!current || current.__typedSnapshotInstalled) return;
+
+  const snapshottingGetChapters: SnapshottingGetChapters = async (view: object) => {
+    const chapters = await current.call(plugin, view);
+    plugin.viewChapterSnapshots ??= new WeakMap<object, ChapterNode[]>();
+    plugin.viewChapterSnapshots.set(view, chapters);
+    return chapters;
+  };
+  snapshottingGetChapters.__typedSnapshotInstalled = true;
+  plugin.getChaptersForView = snapshottingGetChapters;
+}
+
 function installTypedProductionSessions(): void {
   const prototype = LegacyPlugin.prototype as ProductionPlugin & {
     attachStepperToView?: (view: object) => Promise<void>;
-    getChaptersForView?: (view: object) => Promise<ChapterNode[]>;
     onunload?: () => void;
   };
   const legacyAttach = prototype.attachStepperToView;
   if (!legacyAttach || (legacyAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled) return;
 
-  const legacyGetChapters = prototype.getChaptersForView;
-  if (legacyGetChapters && !(legacyGetChapters as { __typedSnapshotInstalled?: boolean }).__typedSnapshotInstalled) {
-    const snapshottingGetChapters = async function (this: ProductionPlugin, view: object): Promise<ChapterNode[]> {
-      const chapters = await legacyGetChapters.call(this, view);
-      this.viewChapterSnapshots ??= new WeakMap<object, ChapterNode[]>();
-      this.viewChapterSnapshots.set(view, chapters);
-      return chapters;
-    };
-    (snapshottingGetChapters as { __typedSnapshotInstalled?: boolean }).__typedSnapshotInstalled = true;
-    prototype.getChaptersForView = snapshottingGetChapters;
-  }
-
   const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
+    ensureChapterSnapshotting(this);
     this.viewSessions ??= new Map<object, ViewSession>();
     this.viewSessionVersions ??= new Map<object, number>();
     const sessionVersion = (this.viewSessionVersions.get(view) ?? 0) + 1;
