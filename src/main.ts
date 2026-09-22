@@ -22,6 +22,7 @@ interface ProductionPlugin {
   soundEngine?: { playScrollTick?: (volume: number) => void };
   scrollBindings?: Map<unknown, LegacyScrollBinding>;
   viewSessions?: Map<object, ViewSession>;
+  viewSessionVersions?: Map<object, number>;
   viewTooltips?: Map<object, HTMLElement>;
   getChaptersForView?: (view: object) => Promise<ChapterNode[]>;
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
@@ -62,10 +63,15 @@ function installTypedProductionSessions(): void {
 
   const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
     this.viewSessions ??= new Map<object, ViewSession>();
+    this.viewSessionVersions ??= new Map<object, number>();
+    const sessionVersion = (this.viewSessionVersions.get(view) ?? 0) + 1;
+    this.viewSessionVersions.set(view, sessionVersion);
+
     this.viewSessions.get(view)?.dispose();
     this.viewSessions.delete(view);
 
     await legacyAttach.call(this, view);
+    if (this.viewSessionVersions.get(view) !== sessionVersion) return;
 
     const typedView = view as { contentEl?: HTMLElement; file?: unknown };
     const container = typedView?.contentEl;
@@ -75,6 +81,7 @@ function installTypedProductionSessions(): void {
     if (!stepperElement) return;
 
     const chapters = await this.getChaptersForView(view);
+    if (this.viewSessionVersions.get(view) !== sessionVersion || typedView.contentEl !== container) return;
     if (!chapters.length) return;
 
     const dashElements = Array.from(container.querySelectorAll('.codex-dash-item')) as HTMLElement[];
@@ -136,6 +143,10 @@ function installTypedProductionSessions(): void {
       },
     });
 
+    if (this.viewSessionVersions.get(view) !== sessionVersion || typedView.contentEl !== container) {
+      session.dispose();
+      return;
+    }
     this.viewSessions.set(view, session);
   };
   (typedAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled = true;
@@ -145,6 +156,7 @@ function installTypedProductionSessions(): void {
   prototype.onunload = function (this: ProductionPlugin): void {
     this.viewSessions?.forEach((session) => session.dispose());
     this.viewSessions?.clear();
+    this.viewSessionVersions?.clear();
     legacyUnload?.call(this);
   };
 }
