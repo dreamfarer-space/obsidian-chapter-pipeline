@@ -5,6 +5,8 @@ export interface ReadingTrackerOptions {
   findHeadings: (chapter: ChapterNode) => Element | null;
   onActiveChapter: (index: number) => void;
   onScrollTick?: () => void;
+  /** Set false when an existing renderer already established the initial UI state. */
+  trackImmediately?: boolean;
 }
 
 /** Reading View tracker with one passive listener and rAF coalescing. */
@@ -26,7 +28,7 @@ export class ReadingViewTracker {
     this.chapters = chapters;
     this.headingCache = new Array(chapters.length);
     this.lastActiveIndex = -1;
-    this.schedule();
+    if (this.options.trackImmediately !== false) this.schedule();
   }
 
   private readonly handleScroll = (): void => {
@@ -39,10 +41,13 @@ export class ReadingViewTracker {
 
   private schedule(): void {
     if (this.frame !== null || this.disposed) return;
-    this.frame = requestAnimationFrame(() => {
+    let executedSynchronously = false;
+    const frame = requestAnimationFrame(() => {
+      executedSynchronously = true;
       this.frame = null;
       this.update();
     });
+    this.frame = executedSynchronously ? null : frame;
   }
 
   private resolveHeading(index: number): Element | null {
@@ -71,7 +76,9 @@ export class ReadingViewTracker {
       if (top <= baseline) active = index;
       else break;
     }
-    return active;
+    // Before the first heading reaches the baseline, the document is still in
+    // the first chapter rather than in a synthetic "no active chapter" state.
+    return active >= 0 ? active : (this.chapters.length > 0 ? 0 : -1);
   }
 
   private findActiveIndex(baseline: number): number {
@@ -97,7 +104,7 @@ export class ReadingViewTracker {
       const top = this.headingTop(index);
       if (top !== null && top <= baseline) return index;
     }
-    return -1;
+    return this.chapters.length > 0 ? 0 : -1;
   }
 
   private update(): void {

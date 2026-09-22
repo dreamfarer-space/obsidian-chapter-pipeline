@@ -67,6 +67,9 @@ export interface StepperOptions {
   container: HTMLElement;
   chapters: ChapterNode[];
   onSelect: (chapter: ChapterNode) => void;
+  /** Existing production DOM to adopt during the legacy-to-typed migration. */
+  existingElement?: HTMLElement;
+  existingDashes?: HTMLElement[];
 }
 
 /** Minimal DOM builder used by the main plugin and embedders. */
@@ -74,16 +77,25 @@ export class StepperView {
   readonly element: HTMLElement;
   private readonly options: StepperOptions;
   private readonly dashElements: HTMLElement[] = [];
+  private readonly adopted: boolean;
 
   constructor(options: StepperOptions) {
     this.options = options;
-    this.element = document.createElement('nav');
+    this.adopted = Boolean(options.existingElement);
+    this.element = options.existingElement ?? document.createElement('nav');
+
+    if (this.adopted) {
+      this.dashElements.push(...(options.existingDashes ?? []));
+      return;
+    }
+
     this.element.className = DOM_CLASSES.stepper;
     this.element.setAttribute('aria-label', 'Chapter navigation');
     this.render();
   }
 
   render(): void {
+    if (this.adopted) return;
     this.element.replaceChildren();
     this.dashElements.length = 0;
     for (const chapter of this.options.chapters) {
@@ -102,6 +114,7 @@ export class StepperView {
   }
 
   dispose(): void {
+    this.dashElements.length = 0;
     this.element.remove();
   }
 }
