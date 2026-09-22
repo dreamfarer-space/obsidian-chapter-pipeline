@@ -13,10 +13,17 @@ const {
     state: { frames?: number; stableFrames?: number },
     error: number,
     options?: { maxFrames?: number; threshold?: number; stableFramesRequired?: number }
-  ) => { frames: number; stableFrames: number; converged: boolean; hitCap: boolean; shouldContinue: boolean };
+  ) => CalibrationState;
 };
 
 type LegacyPluginConstructor = { prototype: Record<string, any> };
+type CalibrationState = {
+  frames: number;
+  stableFrames: number;
+  converged: boolean;
+  hitCap: boolean;
+  shouldContinue: boolean;
+};
 
 function fallbackHeadings(content: string): Array<{ heading: string; level: number; position: { start: { line: number } } }> {
   const headings: Array<{ heading: string; level: number; position: { start: { line: number } } }> = [];
@@ -202,7 +209,13 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     };
     alignSmoothly();
 
-    let state = { frames: 0, stableFrames: 0 };
+    let state: CalibrationState = {
+      frames: 0,
+      stableFrames: 0,
+      converged: false,
+      hitCap: false,
+      shouldContinue: true
+    };
     const calibratePreview = () => {
       if (!targetHeading && typeof chapter === 'object') {
         targetHeading = this.getReadingHeading?.(targetView, chapter) || null;
