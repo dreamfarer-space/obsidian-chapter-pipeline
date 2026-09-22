@@ -40,7 +40,7 @@ jobs:
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Check whether release already exists
         id: existing
@@ -87,7 +87,14 @@ jobs:
         run: |
           mkdir -p dist/release
           cp main.js manifest.json styles.css dist/release/
-          (cd dist/release && zip -q "../chapter-pipeline-$VERSION.zip" main.js manifest.json styles.css)
+          (cd dist/release && zip -q "../charter-pipeline-$VERSION.zip" main.js manifest.json styles.css)
+
+      - name: Verify required release files
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          test -f main.js
+          test -f manifest.json
+          test -f styles.css
 
       - name: Publish GitHub release
         if: steps.existing.outputs.exists != 'true'
@@ -101,7 +108,7 @@ jobs:
             main.js \
             manifest.json \
             styles.css \
-            "dist/chapter-pipeline-$VERSION.zip" \
+            "dist/charter-pipeline-$VERSION.zip" \
             --target "$GITHUB_SHA" \
             --title "$TAG" \
             --generate-notes
