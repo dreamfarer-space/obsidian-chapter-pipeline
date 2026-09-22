@@ -3,6 +3,8 @@ import type { ChapterNode } from '../types';
 export interface LivePreviewTrackerOptions {
   container: HTMLElement;
   onActiveChapter: (index: number) => void;
+  /** Prefer a CodeMirror-derived document line when the owning view exposes one. */
+  getViewportLine?: () => number | null;
   /** Set false when an existing renderer already established the initial UI state. */
   trackImmediately?: boolean;
 }
@@ -21,8 +23,9 @@ const CANDIDATE_SELECTOR = '.cm-line, .cm-heading';
 const CANDIDATE_CLASS_PATTERN = /(^|\s)(cm-line|cm-heading)(\s|$)/;
 
 /**
- * CodeMirror 6 tracker. Rendered editor rows are viewport-local anchors only;
- * active chapter state is always resolved against the full parsed chapter list.
+ * CodeMirror 6 tracker. The editor viewport line is authoritative when it can
+ * be read; rendered rows are only viewport-local fallback anchors. Active
+ * chapter state is always resolved against the full parsed chapter list.
  * Geometry is read only inside a scheduled animation frame.
  */
 export class LivePreviewTracker {
@@ -197,12 +200,21 @@ export class LivePreviewTracker {
     return active < 0 ? -1 : this.chapterLineOrder[active].chapterIndex;
   }
 
-  private update(): void {
+  private getDocumentLine(baseline: number): number | null {
+    const viewportLine = this.options.getViewportLine?.();
+    if (typeof viewportLine === 'number' && Number.isInteger(viewportLine) && viewportLine >= 0) {
+      return viewportLine;
+    }
+
     this.refreshCandidates();
-    if (this.renderedLines.length === 0 || this.chapterLineOrder.length === 0) return;
+    return this.findDocumentLineAtBaseline(baseline);
+  }
+
+  private update(): void {
+    if (this.chapterLineOrder.length === 0) return;
 
     const baseline = this.options.container.getBoundingClientRect().top + 70;
-    const documentLine = this.findDocumentLineAtBaseline(baseline);
+    const documentLine = this.getDocumentLine(baseline);
     if (documentLine === null) return;
 
     const activeIndex = this.findChapterAtLine(documentLine);
