@@ -1,0 +1,32 @@
+name: Issue 8 merge main dry run
+
+on:
+  push:
+    paths:
+      - '.github/workflows/issue8-merge-main-dry-run.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refactor/issue-8-view-sessions
+          fetch-depth: 0
+
+      - name: Try merging latest main
+        run: |
+          git fetch origin main
+          set +e
+          git merge --no-commit --no-ff origin/main
+          status=$?
+          if [ "$status" -ne 0 ]; then
+            echo 'CONFLICTS:'
+            git diff --name-only --diff-filter=U
+            exit "$status"
+          fi
+          echo 'MERGE_CLEAN'
+          git diff --stat --cached
