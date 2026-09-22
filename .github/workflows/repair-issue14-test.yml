@@ -1,0 +1,42 @@
+name: Repair issue 14 test file
+
+on:
+  push:
+    branches: [feature/issue-14]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/issue-14
+          fetch-depth: 0
+      - name: Restore full test suite and update two lightweight-default assertions
+        shell: bash
+        run: |
+          git show 1aabf38c84ca334beb59e417d79d30485903dd79:main.test.js > main.test.js
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('main.test.js')
+          text = path.read_text()
+          old1 = "  assert.equal(plugin.settings.tooltipGlassmorphism, true);"
+          old2 = "  assert.equal(glassControl.value, true);"
+          assert text.count(old1) == 1, text.count(old1)
+          assert text.count(old2) == 1, text.count(old2)
+          text = text.replace(old1, "  assert.equal(plugin.settings.tooltipGlassmorphism, false);")
+          text = text.replace(old2, "  assert.equal(glassControl.value, false);")
+          path.write_text(text)
+          PY
+      - name: Commit repaired test file
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.test.js
+          git commit -m "test: align settings assertions with lightweight defaults"
+          git push origin HEAD:feature/issue-14
