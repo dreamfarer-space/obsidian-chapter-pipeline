@@ -29,7 +29,7 @@ jobs:
           path = Path('main.test.js')
           text = path.read_text()
           anchor = "  assert.equal(disabledHarness.sourceScroller.listeners.get('scroll'), undefined);\n"
-          insertion = """  const readingSession = disabledHarness.plugin.viewSessions?.get(disabledHarness.view);\n  assert.ok(readingSession instanceof ChapterPipelinePlugin.ViewSession);\n  assert.ok(readingSession.tracker instanceof ChapterPipelinePlugin.ReadingViewTracker);\n  assert.equal(disabledHarness.plugin.scrollBindings.has(disabledHarness.container), false);\n"""
+          insertion = """  const readingSession = disabledHarness.plugin.viewSessions?.get(disabledHarness.view);\n  console.log('typed-session-diagnostic', { exists: Boolean(readingSession), sessionCtor: readingSession?.constructor?.name, trackerCtor: readingSession?.tracker?.constructor?.name, exportedSessionCtor: ChapterPipelinePlugin.ViewSession?.name });\n  assert.ok(readingSession instanceof ChapterPipelinePlugin.ViewSession);\n  assert.ok(readingSession.tracker instanceof ChapterPipelinePlugin.ReadingViewTracker);\n  assert.equal(disabledHarness.plugin.scrollBindings.has(disabledHarness.container), false);\n"""
           if insertion not in text:
               if anchor not in text:
                   raise SystemExit('reading session test anchor not found')
