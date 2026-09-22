@@ -22,16 +22,22 @@ export function clampTooltipPosition(
   return { top, left };
 }
 
+export interface TooltipManagerOptions {
+  existingTooltip?: HTMLElement;
+}
+
 /** Per-view tooltip owner. A view owns exactly one node and can dispose safely. */
 export class TooltipManager {
   private readonly tooltip: HTMLElement;
   private disposed = false;
 
-  constructor(private readonly owner: HTMLElement) {
-    this.tooltip = document.createElement('div');
-    this.tooltip.className = DOM_CLASSES.tooltip;
-    this.tooltip.hidden = true;
-    owner.ownerDocument.body.append(this.tooltip);
+  constructor(private readonly owner: HTMLElement, options: TooltipManagerOptions = {}) {
+    this.tooltip = options.existingTooltip ?? document.createElement('div');
+    if (!options.existingTooltip) {
+      this.tooltip.className = DOM_CLASSES.tooltip;
+      this.tooltip.hidden = true;
+      owner.ownerDocument.body.append(this.tooltip);
+    }
   }
 
   show(chapter: ChapterNode, anchor: HTMLElement): void {
