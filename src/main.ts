@@ -44,6 +44,7 @@ const LegacyPlugin = require('./legacy-main.js') as {
   updateHierarchyFolding?: typeof updateHierarchyFolding;
 };
 
+/** Remove the compatibility renderer's scroll listener before typed tracking takes ownership. */
 function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {
   const binding = plugin.scrollBindings?.get(container);
   if (!binding) return;
@@ -54,6 +55,7 @@ function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElem
   plugin.scrollBindings?.delete(container);
 }
 
+/** Install typed per-view session ownership onto the legacy coordinator exactly once. */
 function installTypedProductionSessions(): void {
   const prototype = LegacyPlugin.prototype as ProductionPlugin & {
     attachStepperToView?: (view: object) => Promise<void>;
@@ -63,6 +65,7 @@ function installTypedProductionSessions(): void {
   const legacyAttach = prototype.attachStepperToView;
   if (!legacyAttach || (legacyAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled) return;
 
+  /** Attach one generation-guarded typed session after the compatibility renderer finishes. */
   const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
     this.viewSessions ??= new Map<object, ViewSession>();
     this.viewSessionVersions ??= new Map<object, number>();

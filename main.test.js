@@ -552,6 +552,31 @@ test('typed sessions are disposed when Markdown views leave the workspace', asyn
   assert.equal(harness.scroller.listeners.get('scroll')?.length ?? 0, 0);
 });
 
+test('concurrent typed attachment keeps only the newest reverse-completing session', async () => {
+  const harness = createReadingHarness();
+  const pendingReads = [];
+  harness.app.vault.cachedRead = () => new Promise((resolve) => pendingReads.push(resolve));
+
+  const firstAttach = harness.plugin.attachStepperToView(harness.view);
+  const secondAttach = harness.plugin.attachStepperToView(harness.view);
+  assert.equal(pendingReads.length, 2);
+
+  const content = '# First\nbody\nbody\nbody\n## Second\nbody';
+  pendingReads[1](content);
+  await secondAttach;
+  const newestSession = harness.plugin.viewSessions?.get(harness.view);
+  assert.ok(newestSession instanceof ChapterPipelinePlugin.ViewSession);
+  assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
+  assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
+
+  pendingReads[0](content);
+  await firstAttach;
+
+  assert.equal(harness.plugin.viewSessions?.get(harness.view), newestSession);
+  assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
+  assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
+});
+
 test('typed sessions keep the rendered per-view chapter snapshot during resume lookup', async () => {
   const harness = createReadingHarness();
   harness.plugin.settings.maxHeadingLevel = 1;
