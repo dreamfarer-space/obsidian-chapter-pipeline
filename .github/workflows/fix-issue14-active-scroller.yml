@@ -1,0 +1,84 @@
+name: Fix issue 14 active scroller
+
+on:
+  push:
+    branches: [feature/issue-14]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: feature/issue-14
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Reuse active Reading View scroller and add regression coverage
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          src = Path('src/runtime-performance.ts')
+          text = src.read_text()
+          old = """    const isReading = targetView && this.isReadingMode?.(targetView, targetView.contentEl);\n    const previewScroller = isReading\n      ? targetView.contentEl?.querySelector?.('.markdown-preview-view')\n      : null;\n"""
+          new = """    const isReading = targetView && this.isReadingMode?.(targetView, targetView.contentEl);\n    const previewRoot = isReading\n      ? targetView.contentEl?.querySelector?.('.markdown-preview-view')\n      : null;\n    const previewScroller = isReading\n      ? (this.getViewScroller?.(targetView.contentEl, targetView) || previewRoot)\n      : null;\n"""
+          assert text.count(old) == 1, f'expected one jump-scroller block, found {text.count(old)}'
+          src.write_text(text.replace(old, new))
+
+          test_file = Path('main.test.js')
+          tests = test_file.read_text()
+          marker = "test('Reading View jump calibration follows the active parent scroller'"
+          if marker not in tests:
+              tests += r'''
+
+test('Reading View jump calibration follows the active parent scroller', () => {
+  const { container, plugin, scroller, secondHeading, view } = createReadingHarness();
+  const outerScroller = new FakeElement({
+    classes: ['view-content'],
+    rect: { top: 100, left: 250, right: 1000, height: 650 },
+  });
+  outerScroller.clientHeight = 650;
+  outerScroller.scrollHeight = 2400;
+  outerScroller.scrollTop = 100;
+  outerScroller.append(container);
+
+  scroller.clientHeight = 650;
+  scroller.scrollHeight = 2400;
+  scroller.scrollTop = 0;
+  secondHeading.scrollParent = outerScroller;
+
+  plugin.jumpToHeading(view, {
+    line: 4,
+    headingIndex: 1,
+    level: 2,
+    title: 'Second',
+    rawHeading: 'Second'
+  });
+
+  assert.equal(outerScroller.lastScrollTo?.top, 300);
+  assert.equal(scroller.lastScrollTo, undefined);
+  assert.equal(secondHeading.getBoundingClientRect().top, outerScroller.getBoundingClientRect().top + 20);
+});
+'''
+              test_file.write_text(tests)
+          PY
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+      - name: Commit source, regression test, bundle, and remove helper workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/fix-issue14-active-scroller.yml
+          git add src/runtime-performance.ts main.test.js main.js
+          git commit -m "fix: calibrate reading jumps on active scroller"
+          git push origin HEAD:feature/issue-14
