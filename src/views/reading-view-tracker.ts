@@ -76,7 +76,9 @@ export class ReadingViewTracker {
       if (top <= baseline) active = index;
       else break;
     }
-    return active;
+    // Before the first heading reaches the baseline, the document is still in
+    // the first chapter rather than in a synthetic "no active chapter" state.
+    return active >= 0 ? active : (this.chapters.length > 0 ? 0 : -1);
   }
 
   private findActiveIndex(baseline: number): number {
@@ -102,7 +104,7 @@ export class ReadingViewTracker {
       const top = this.headingTop(index);
       if (top !== null && top <= baseline) return index;
     }
-    return -1;
+    return this.chapters.length > 0 ? 0 : -1;
   }
 
   private update(): void {
