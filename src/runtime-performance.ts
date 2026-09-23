@@ -291,7 +291,7 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     if (isReading) {
       // Obsidian normally scrolls the preview element. Some layouts put the
       // view root inside one scrolling `.view-content` wrapper, so inspect only
-      // that single direct parent candidate — never walk an ancestor chain.
+      // that single direct host candidate — never walk an ancestor chain.
       const parent = container.parentElement as HTMLElement | null;
       const parentIsVerifiedScrollSource = Boolean(
         parent
@@ -306,6 +306,24 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     return [scroller];
   };
 
+  // The legacy renderer still asks for an initial active line while it creates
+  // DOM. Inactive panes skip that expensive compatibility calculation entirely;
+  // their typed tracker will become authoritative after activation and scrolling.
+  const originalGetCurrentEditorTopLine = proto.getCurrentEditorTopLine;
+  if (typeof originalGetCurrentEditorTopLine === 'function') {
+    proto.getCurrentEditorTopLine = function scopedGetCurrentEditorTopLine(view: any, ...args: unknown[]) {
+      if (
+        view
+        && this.app?.workspace?.getActiveViewOfType
+        && typeof this.isActiveMarkdownView === 'function'
+        && !this.isActiveMarkdownView(view)
+      ) {
+        return 0;
+      }
+      return originalGetCurrentEditorTopLine.call(this, view, ...args);
+    };
+  }
+
   // Cache the Reading View heading index per preview scroller. The typed
   // ReadingViewTracker asks for individual chapters while scrolling; resolving
   // them against this snapshot avoids a full h1..h6 query for every lookup.
@@ -316,19 +334,22 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     if (!scroller) return originalGetReadingHeading?.call(this, view, chapter) ?? null;
 
     let snapshot = readingHeadingSnapshots.get(scroller);
-    if (!snapshot || snapshot.entries.some((entry) => (entry.element as Element & { isConnected?: boolean }).isConnected === false)) {
+    if (!snapshot) {
       snapshot = buildReadingHeadingSnapshot(scroller);
       readingHeadingSnapshots.set(scroller, snapshot);
     }
 
     let resolved = resolveReadingHeading(snapshot, scroller, chapter);
-    if (!resolved) {
-      // Reading View can virtualize or replace chunks without disconnecting all
-      // previously cached headings. Refresh only on a miss, not on every frame.
-      snapshot = buildReadingHeadingSnapshot(scroller);
-      readingHeadingSnapshots.set(scroller, snapshot);
-      resolved = resolveReadingHeading(snapshot, scroller, chapter);
+    if (resolved && (resolved as Element & { isConnected?: boolean }).isConnected !== false) {
+      return resolved;
     }
+
+    // Reading View can virtualize or replace chunks. Refresh only when a cached
+    // target disappeared or a lookup misses, never by scanning the whole cached
+    // snapshot on every chapter resolution.
+    snapshot = buildReadingHeadingSnapshot(scroller);
+    readingHeadingSnapshots.set(scroller, snapshot);
+    resolved = resolveReadingHeading(snapshot, scroller, chapter);
     return resolved;
   };
 
