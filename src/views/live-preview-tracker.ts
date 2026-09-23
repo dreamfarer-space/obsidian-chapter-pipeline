@@ -72,6 +72,7 @@ export class LivePreviewTracker {
     });
   }
 
+  /** Replace the authoritative chapter sequence and reset viewport-derived state. */
   setChapters(chapters: ChapterNode[]): void {
     this.chapters = chapters;
     this.chapterLineOrder = chapters
@@ -140,6 +141,7 @@ export class LivePreviewTracker {
     return this.isInsideCandidate(record.target) ? 'layout' : 'none';
   }
 
+  /** Refresh the cached viewport-local line anchors after relevant DOM mutations. */
   private refreshCandidates(): void {
     if (!this.candidatesDirty) return;
 
@@ -158,6 +160,7 @@ export class LivePreviewTracker {
     this.candidatesDirty = false;
   }
 
+  /** Infer the document line intersecting the active baseline from rendered anchors. */
   private findDocumentLineAtBaseline(baseline: number): number | null {
     if (this.renderedLines.length === 0) return null;
 
@@ -182,6 +185,7 @@ export class LivePreviewTracker {
     return this.renderedLines[Math.max(0, active)].line;
   }
 
+  /** Resolve a document line to the latest chapter starting at or before it. */
   private findChapterAtLine(line: number): number {
     let low = 0;
     let high = this.chapterLineOrder.length - 1;
@@ -200,6 +204,7 @@ export class LivePreviewTracker {
     return active < 0 ? -1 : this.chapterLineOrder[active].chapterIndex;
   }
 
+  /** Prefer the editor viewport line, falling back to rendered DOM anchors. */
   private getDocumentLine(baseline: number): number | null {
     const viewportLine = this.options.getViewportLine?.();
     if (typeof viewportLine === 'number' && Number.isInteger(viewportLine) && viewportLine >= 0) {
@@ -210,6 +215,7 @@ export class LivePreviewTracker {
     return this.findDocumentLineAtBaseline(baseline);
   }
 
+  /** Recompute active chapter state for the current animation frame. */
   private update(): void {
     if (this.chapterLineOrder.length === 0) return;
 
@@ -223,6 +229,7 @@ export class LivePreviewTracker {
     this.options.onActiveChapter(activeIndex);
   }
 
+  /** Stop tracking and release observer, frame, and cached anchor state. */
   dispose(): void {
     this.disposed = true;
     this.options.container.removeEventListener('scroll', this.schedule);
