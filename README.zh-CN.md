@@ -1,25 +1,25 @@
 <div align="center">
 
-# 🪐 Charter Pipeline
+# 🪐 Chapter Pipeline
 
 **为 Obsidian 打造的 Linear 风格极简章节导航**
 
 悬浮章节横线 · KaTeX 公式预览 · 精准置顶跳转 · 阅读进度与书签
 
-[![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-charter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-charter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![Obsidian](https://img.shields.io/badge/Obsidian-%E2%89%A5%200.15.0-7c3aed?style=flat-square&logo=obsidian)](https://obsidian.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 [English](README.md) · **简体中文**
 
-<img src="assets/banner-zh.png" alt="Charter Pipeline 中文横幅" width="100%" />
+<img src="assets/banner-zh.svg" alt="Chapter Pipeline 中文横幅，作者择梦舟" width="100%" />
 
 </div>
 
 ## 简介
 
-Charter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正文边缘的极简章节轨道。它不会长期占用一个侧边栏，而是使用一列轻量的横线表示各级标题：悬浮即可预览章节内容与 KaTeX 数学公式，点击即可跳转到目标标题，并稳定停靠在当前视图顶部附近。
+Chapter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正文边缘的极简章节轨道。它不会长期占用一个侧边栏，而是使用一列轻量的横线表示各级标题：悬浮即可预览章节内容与 KaTeX 数学公式，点击即可跳转到目标标题，并稳定停靠在当前视图顶部附近。
 
 它尤其适合长篇技术笔记、论文与科研记录、考研/课程资料、项目文档，以及任何需要频繁在章节之间跳转、又不希望目录占据屏幕空间的场景。
 
@@ -31,7 +31,7 @@ Charter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正�
 - **仓库自动化完善**：CI 覆盖依赖审计、严格 TypeScript 检查、测试、生产构建与 `main.js` 一致性；同时启用 CodeQL、Dependabot、语义化 PR 检查和 CodeRabbit 审查。
 - **文档重新整理**：英文与简体中文 README 分离维护，主文档不再堆叠多代 changelog。
 
-完整历史请查看 [GitHub Releases](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases)。
+完整历史请查看 [GitHub Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)。
 
 ## 核心功能
 
@@ -88,25 +88,25 @@ Charter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正�
 
 ## 安装
 
-Charter Pipeline 正在准备提交 Obsidian 社区插件市场。在正式通过审核前，请使用 BRAT 或 GitHub Release 手动安装。
+Chapter Pipeline 正在准备提交 Obsidian 社区插件市场。在正式通过审核前，请使用 BRAT 或 GitHub Release 手动安装。
 
 ### BRAT
 
 1. 从 Obsidian 社区插件安装并启用 **BRAT**。
 2. 在 BRAT 中选择 **Add Beta plugin**。
-3. 输入 `dreamfarer-space/obsidian-charter-pipeline` 并添加插件。
-4. 在 **设置 → 第三方插件 / Community Plugins** 中启用 **Charter Pipeline**。
+3. 输入 `dreamfarer-space/obsidian-chapter-pipeline` 并添加插件。
+4. 在 **设置 → 第三方插件 / Community Plugins** 中启用 **Chapter Pipeline**。
 
 ### 手动安装
 
-1. 从最新 [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest) 下载 `chapter-pipeline-<version>.zip`，也可以分别下载 `main.js`、`manifest.json`、`styles.css`。
+1. 从最新 [GitHub Release](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases/latest) 下载 `chapter-pipeline-<version>.zip`，也可以分别下载 `main.js`、`manifest.json`、`styles.css`。
 2. 将三个插件文件放入：
 
 ```text
 <你的仓库>/.obsidian/plugins/chapter-pipeline/
 ```
 
-3. 重载 Obsidian，然后在 **设置 → 第三方插件** 中启用 **Charter Pipeline**。
+3. 重载 Obsidian，然后在 **设置 → 第三方插件** 中启用 **Chapter Pipeline**。
 
 ## 命令
 
@@ -114,14 +114,14 @@ Charter Pipeline 正在准备提交 Obsidian 社区插件市场。在正式通�
 
 | 命令 | 用途 |
 | --- | --- |
-| `Charter Pipeline: Jump to previous chapter` | 跳转到上一个标题。 |
-| `Charter Pipeline: Jump to next chapter` | 跳转到下一个标题。 |
-| `Charter Pipeline: Search & switch chapter` | 打开章节模糊搜索器。 |
-| `Charter Pipeline: Resume last chapter` | 返回本地保存的阅读位置。 |
-| `Charter Pipeline: Toggle revisit bookmark for current chapter` | 切换“稍后重看”标记。 |
-| `Charter Pipeline: Toggle important bookmark for current chapter` | 切换“重要”标记。 |
-| `Charter Pipeline: Clear reading progress & bookmarks for current note` | 清除当前笔记的本地阅读状态。 |
-| `Charter Pipeline: Clean up invalid reading progress & bookmarks` | 清理已删除或移动笔记留下的失效记录。 |
+| `Chapter Pipeline: Jump to previous chapter` | 跳转到上一个标题。 |
+| `Chapter Pipeline: Jump to next chapter` | 跳转到下一个标题。 |
+| `Chapter Pipeline: Search & switch chapter` | 打开章节模糊搜索器。 |
+| `Chapter Pipeline: Resume last chapter` | 返回本地保存的阅读位置。 |
+| `Chapter Pipeline: Toggle revisit bookmark for current chapter` | 切换“稍后重看”标记。 |
+| `Chapter Pipeline: Toggle important bookmark for current chapter` | 切换“重要”标记。 |
+| `Chapter Pipeline: Clear reading progress & bookmarks for current note` | 清除当前笔记的本地阅读状态。 |
+| `Chapter Pipeline: Clean up invalid reading progress & bookmarks` | 清理已删除或移动笔记留下的失效记录。 |
 
 ## 设置
 
@@ -147,7 +147,7 @@ Charter Pipeline 正在准备提交 Obsidian 社区插件市场。在正式通�
 
 ## 性能与可访问性
 
-Charter Pipeline 尽量把超长文档中的逐帧工作量控制在较低水平：
+Chapter Pipeline 尽量把超长文档中的逐帧工作量控制在较低水平：
 
 - 被动滚动监听 + `requestAnimationFrame` 合帧；
 - 阅读视图标题元素缓存；
@@ -181,7 +181,7 @@ CI 还会验证生产构建后 `main.js` 不会出现未提交差异。
 
 ## 隐私
 
-Charter Pipeline 不依赖任何外部服务。阅读进度和章节书签通过 Obsidian 插件数据 API 保存在本地，并且默认关闭。
+Chapter Pipeline 不依赖任何外部服务。阅读进度和章节书签通过 Obsidian 插件数据 API 保存在本地，并且默认关闭。
 
 ## 许可证
 

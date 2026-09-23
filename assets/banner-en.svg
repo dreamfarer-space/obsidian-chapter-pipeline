@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="512" viewBox="0 0 1024 512" role="img" aria-labelledby="title desc">
+  <title id="title">Chapter Pipeline</title>
+  <desc id="desc">Chapter Pipeline banner by 择梦舟, @dreamfarer-space</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#090d1a"/>
+      <stop offset="0.55" stop-color="#111a33"/>
+      <stop offset="1" stop-color="#24154a"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#60a5fa"/>
+      <stop offset="0.52" stop-color="#8b5cf6"/>
+      <stop offset="1" stop-color="#c084fc"/>
+    </linearGradient>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M32 0H0V32" fill="none" stroke="#ffffff" stroke-opacity="0.035"/>
+    </pattern>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="512" rx="30" fill="url(#bg)"/>
+  <rect width="1024" height="512" rx="30" fill="url(#grid)"/>
+  <circle cx="790" cy="110" r="155" fill="#7c3aed" fill-opacity="0.16" filter="url(#glow)"/>
+  <circle cx="545" cy="435" r="150" fill="#2563eb" fill-opacity="0.10" filter="url(#glow)"/>
+
+  <g transform="translate(64 72)">
+    <rect x="0" y="0" width="48" height="48" rx="14" fill="#ffffff" fill-opacity="0.08" stroke="#ffffff" stroke-opacity="0.12"/>
+    <path d="M14 28h20M14 22h28M14 34h13" stroke="url(#accent)" stroke-width="3" stroke-linecap="round"/>
+    <text x="0" y="108" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="56" font-weight="760" letter-spacing="-1.8">Chapter Pipeline</text>
+    <text x="0" y="152" fill="#cbd5e1" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="20">Minimal outline navigation for Obsidian</text>
+
+    <g font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif" font-size="14" fill="#dbeafe">
+      <g transform="translate(0 193)"><rect width="126" height="34" rx="17" fill="#3b82f6" fill-opacity="0.14" stroke="#60a5fa" stroke-opacity="0.28"/><text x="18" y="22">KaTeX previews</text></g>
+      <g transform="translate(138 193)"><rect width="142" height="34" rx="17" fill="#8b5cf6" fill-opacity="0.14" stroke="#a78bfa" stroke-opacity="0.28"/><text x="18" y="22">Pinned navigation</text></g>
+      <g transform="translate(292 193)"><rect width="145" height="34" rx="17" fill="#a855f7" fill-opacity="0.12" stroke="#c084fc" stroke-opacity="0.28"/><text x="18" y="22">Reading bookmarks</text></g>
+    </g>
+
+    <g transform="translate(0 302)" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+      <text x="0" y="0" fill="#94a3b8" font-size="14">CREATED BY</text>
+      <text x="0" y="30" fill="#f8fafc" font-size="18" font-weight="650">择梦舟</text>
+      <text x="70" y="30" fill="#93c5fd" font-size="18">@dreamfarer-space</text>
+    </g>
+  </g>
+
+  <g transform="translate(600 92)">
+    <rect width="360" height="328" rx="24" fill="#0b1224" fill-opacity="0.78" stroke="#ffffff" stroke-opacity="0.10"/>
+    <circle cx="24" cy="24" r="5" fill="#fb7185"/><circle cx="42" cy="24" r="5" fill="#fbbf24"/><circle cx="60" cy="24" r="5" fill="#4ade80"/>
+    <rect x="84" y="18" width="154" height="12" rx="6" fill="#ffffff" fill-opacity="0.08"/>
+
+    <g transform="translate(28 70)" stroke-linecap="round">
+      <line x1="0" y1="0" x2="38" y2="0" stroke="#60a5fa" stroke-width="4"/>
+      <line x1="0" y1="36" x2="26" y2="36" stroke="#64748b" stroke-width="3"/>
+      <line x1="0" y1="72" x2="18" y2="72" stroke="#475569" stroke-width="3"/>
+      <line x1="0" y1="108" x2="30" y2="108" stroke="#8b5cf6" stroke-width="4"/>
+      <line x1="0" y1="144" x2="20" y2="144" stroke="#475569" stroke-width="3"/>
+      <line x1="0" y1="180" x2="26" y2="180" stroke="#64748b" stroke-width="3"/>
+      <line x1="0" y1="216" x2="16" y2="216" stroke="#475569" stroke-width="3"/>
+    </g>
+
+    <g transform="translate(94 68)" font-family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif">
+      <rect x="0" y="0" width="232" height="104" rx="16" fill="#111c35" stroke="#60a5fa" stroke-opacity="0.30"/>
+      <text x="18" y="28" fill="#f8fafc" font-size="16" font-weight="700">3. System Model</text>
+      <text x="18" y="54" fill="#94a3b8" font-size="12">Hover a chapter to preview</text>
+      <text x="18" y="80" fill="#c4b5fd" font-size="16">G(s) = K / (s + a)</text>
+      <rect x="0" y="128" width="210" height="12" rx="6" fill="#ffffff" fill-opacity="0.09"/>
+      <rect x="0" y="152" width="184" height="10" rx="5" fill="#ffffff" fill-opacity="0.06"/>
+      <rect x="0" y="176" width="224" height="10" rx="5" fill="#ffffff" fill-opacity="0.06"/>
+      <rect x="0" y="200" width="142" height="10" rx="5" fill="#ffffff" fill-opacity="0.06"/>
+    </g>
+  </g>
+
+  <rect x="2" y="2" width="1020" height="508" rx="28" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="2"/>
+</svg>

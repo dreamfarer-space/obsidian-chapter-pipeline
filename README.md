@@ -6,20 +6,20 @@
 
 Floating heading dashes · KaTeX previews · pinned-top navigation · reading bookmarks
 
-[![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-charter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases)
-[![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-charter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
+[![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![Obsidian](https://img.shields.io/badge/Obsidian-%E2%89%A5%200.15.0-7c3aed?style=flat-square&logo=obsidian)](https://obsidian.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
 
-<img src="assets/banner-en.png" alt="Charter Pipeline banner" width="100%" />
+<img src="assets/banner-en.svg" alt="Chapter Pipeline banner by 择梦舟" width="100%" />
 
 </div>
 
 ## Overview
 
-Charter Pipeline turns long Obsidian notes into a compact, margin-mounted navigation rail. Instead of a permanent outline sidebar, headings are represented as lightweight horizontal dashes beside the note. Hover a dash to preview the section, including KaTeX math; click it to jump to the heading and keep it pinned near the top of the viewport.
+Chapter Pipeline turns long Obsidian notes into a compact, margin-mounted navigation rail. Instead of a permanent outline sidebar, headings are represented as lightweight horizontal dashes beside the note. Hover a dash to preview the section, including KaTeX math; click it to jump to the heading and keep it pinned near the top of the viewport.
 
 It is designed for long technical notes, research documents, study material, documentation, and any workflow where you want fast chapter navigation without giving up screen space.
 
@@ -31,7 +31,7 @@ It is designed for long technical notes, research documents, study material, doc
 - **Stronger repository automation** — CI now covers dependency auditing, strict TypeScript checks, tests, production builds, and generated-bundle consistency, alongside CodeQL, Dependabot, semantic PR checks, and CodeRabbit review.
 - **Cleaner documentation** — the English and Simplified Chinese documentation are now maintained as separate README files.
 
-See [Releases](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases) for the full version history.
+See [Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases) for the full version history.
 
 ## Core features
 
@@ -80,7 +80,7 @@ Optional local-only reading state can store:
 - **Revisit** markers;
 - **Important** markers.
 
-This data stays in plugin storage. Charter Pipeline does not modify your Markdown or Frontmatter, and deleted-note records can be cleaned automatically or manually.
+This data stays in plugin storage. Chapter Pipeline does not modify your Markdown or Frontmatter, and deleted-note records can be cleaned automatically or manually.
 
 ### Tactile interaction
 
@@ -88,25 +88,25 @@ A lightweight Web Audio synthesizer can provide subtle micro-switch feedback whe
 
 ## Installation
 
-Charter Pipeline is being prepared for Obsidian Community Plugins. Until it is approved there, use BRAT or a manual GitHub Release install.
+Chapter Pipeline is being prepared for Obsidian Community Plugins. Until it is approved there, use BRAT or a manual GitHub Release install.
 
 ### BRAT
 
 1. Install and enable **BRAT** from Obsidian Community Plugins.
 2. In BRAT, choose **Add Beta plugin**.
-3. Enter `dreamfarer-space/obsidian-charter-pipeline` and add the plugin.
-4. Enable **Charter Pipeline** under **Settings → Community Plugins**.
+3. Enter `dreamfarer-space/obsidian-chapter-pipeline` and add the plugin.
+4. Enable **Chapter Pipeline** under **Settings → Community Plugins**.
 
 ### Manual installation
 
-1. Download `chapter-pipeline-<version>.zip` from the latest [GitHub Release](https://github.com/dreamfarer-space/obsidian-charter-pipeline/releases/latest), or download `main.js`, `manifest.json`, and `styles.css` separately.
+1. Download `chapter-pipeline-<version>.zip` from the latest [GitHub Release](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases/latest), or download `main.js`, `manifest.json`, and `styles.css` separately.
 2. Place the three plugin files in:
 
 ```text
 <YourVault>/.obsidian/plugins/chapter-pipeline/
 ```
 
-3. Reload Obsidian and enable **Charter Pipeline** under **Settings → Community Plugins**.
+3. Reload Obsidian and enable **Chapter Pipeline** under **Settings → Community Plugins**.
 
 ## Commands
 
@@ -114,14 +114,14 @@ All commands can be assigned custom hotkeys in **Settings → Hotkeys**.
 
 | Command | Purpose |
 | --- | --- |
-| `Charter Pipeline: Jump to previous chapter` | Jump to the previous heading. |
-| `Charter Pipeline: Jump to next chapter` | Jump to the next heading. |
-| `Charter Pipeline: Search & switch chapter` | Open the fuzzy chapter palette. |
-| `Charter Pipeline: Resume last chapter` | Return to the locally saved reading position. |
-| `Charter Pipeline: Toggle revisit bookmark for current chapter` | Toggle a Revisit marker. |
-| `Charter Pipeline: Toggle important bookmark for current chapter` | Toggle an Important marker. |
-| `Charter Pipeline: Clear reading progress & bookmarks for current note` | Remove local reading state for the active note. |
-| `Charter Pipeline: Clean up invalid reading progress & bookmarks` | Remove stale records for deleted or moved notes. |
+| `Chapter Pipeline: Jump to previous chapter` | Jump to the previous heading. |
+| `Chapter Pipeline: Jump to next chapter` | Jump to the next heading. |
+| `Chapter Pipeline: Search & switch chapter` | Open the fuzzy chapter palette. |
+| `Chapter Pipeline: Resume last chapter` | Return to the locally saved reading position. |
+| `Chapter Pipeline: Toggle revisit bookmark for current chapter` | Toggle a Revisit marker. |
+| `Chapter Pipeline: Toggle important bookmark for current chapter` | Toggle an Important marker. |
+| `Chapter Pipeline: Clear reading progress & bookmarks for current note` | Remove local reading state for the active note. |
+| `Chapter Pipeline: Clean up invalid reading progress & bookmarks` | Remove stale records for deleted or moved notes. |
 
 ## Settings
 
@@ -147,7 +147,7 @@ All commands can be assigned custom hotkeys in **Settings → Hotkeys**.
 
 ## Performance and accessibility
 
-Charter Pipeline is built to keep per-frame work small on large documents:
+Chapter Pipeline is built to keep per-frame work small on large documents:
 
 - passive, `requestAnimationFrame`-coalesced scroll handling;
 - cached Reading View heading resolution;
@@ -181,7 +181,7 @@ Architecture and implementation notes live in [`docs/`](docs/):
 
 ## Privacy
 
-Charter Pipeline does not require an external service. Reading progress and bookmarks are stored locally by Obsidian's plugin data API and are disabled by default.
+Chapter Pipeline does not require an external service. Reading progress and bookmarks are stored locally by Obsidian's plugin data API and are disabled by default.
 
 ## License
 
