@@ -122,7 +122,7 @@ function resolveReadingHeading(
   const cleanNorm = normalizeHeadingText(chapter?.title || '');
   const rawNorm = normalizeHeadingText(chapter?.rawHeading || chapter?.title || '');
   const targetNorms = Array.from(new Set([cleanNorm, rawNorm].filter(Boolean)));
-  const line = Number.isInteger(chapter?.line) ? chapter.line as number : null;
+  const line = Number.isInteger(chapter?.line) ? Number(chapter.line) : null;
 
   if (line !== null) {
     const byLine = snapshot.byLine.get(line);
@@ -269,8 +269,9 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     return originalExtractChapters.call(this, content, file, parserSettings);
   };
 
-  // Issue #11: only the actual Markdown view scroller is a production scroll
-  // source. Inactive Markdown panes expose no scroller and do no tracking work.
+  // Issue #11: only the actual Markdown scroller (or one directly verified
+  // scrolling parent in Reading View) is a production source. Never bind the
+  // document, window, or an arbitrary ancestor chain.
   proto.getViewScrollers = function scopedGetViewScrollers(container: HTMLElement | null, view: any = null) {
     if (!container) return [];
     if (
@@ -282,11 +283,24 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
       return [];
     }
 
-    const selector = this.isReadingMode?.(view, container)
-      ? '.markdown-preview-view'
-      : '.cm-scroller';
+    const isReading = this.isReadingMode?.(view, container) === true;
+    const selector = isReading ? '.markdown-preview-view' : '.cm-scroller';
     const scroller = container.querySelector?.(selector) as HTMLElement | null;
-    return scroller && typeof scroller.addEventListener === 'function' ? [scroller] : [];
+    if (!scroller || typeof scroller.addEventListener !== 'function') return [];
+
+    if (isReading) {
+      const parent = scroller.parentElement as HTMLElement | null;
+      const parentIsVerifiedScrollSource = Boolean(
+        parent
+        && typeof parent.addEventListener === 'function'
+        && Number(parent.scrollHeight) > Number(parent.clientHeight) + 1
+        && Math.abs(Number(parent.scrollTop) || 0) > 0
+        && Math.abs(Number(scroller.scrollTop) || 0) < 1
+      );
+      if (parentIsVerifiedScrollSource) return [parent];
+    }
+
+    return [scroller];
   };
 
   // Cache the Reading View heading index per preview scroller. The typed
@@ -303,7 +317,16 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
       snapshot = buildReadingHeadingSnapshot(scroller);
       readingHeadingSnapshots.set(scroller, snapshot);
     }
-    return resolveReadingHeading(snapshot, scroller, chapter);
+
+    let resolved = resolveReadingHeading(snapshot, scroller, chapter);
+    if (!resolved) {
+      // Reading View can virtualize or replace chunks without disconnecting all
+      // previously cached headings. Refresh only on a miss, not on every frame.
+      snapshot = buildReadingHeadingSnapshot(scroller);
+      readingHeadingSnapshots.set(scroller, snapshot);
+      resolved = resolveReadingHeading(snapshot, scroller, chapter);
+    }
+    return resolved;
   };
 
   const originalAttachStepperToView = proto.attachStepperToView;
