@@ -3,6 +3,7 @@ import { SoundEngine } from './core/sound';
 import { ReadingStorage } from './core/storage';
 import { LivePreviewTracker } from './views/live-preview-tracker';
 import { ReadingViewTracker } from './views/reading-view-tracker';
+import { buildViewRenderSignature, canReuseRenderedSession } from './views/render-signature';
 import { ViewSession } from './views/view-session';
 import { updateHierarchyFolding } from './ui/stepper';
 import { StepperView } from './ui/stepper';
@@ -109,6 +110,7 @@ function installTypedProductionSessions(): void {
 
     const hierarchyMode = (this.settings?.hierarchyMode ?? 'all') as 'all' | 'hover-expand' | 'active-branch';
     const railIndicator = container.querySelector('.codex-progress-indicator') as HTMLElement | null;
+    const renderSignature = buildViewRenderSignature(this, view);
 
     const session = new ViewSession({
       view,
@@ -118,6 +120,7 @@ function installTypedProductionSessions(): void {
       stepperElement,
       dashElements,
       tooltipElement,
+      renderSignature,
       hierarchyMode,
       // Legacy has already established the initial dash/rail state. The typed
       // tracker becomes authoritative from the first real scroll/mutation.
@@ -178,7 +181,31 @@ function installTypedProductionSessions(): void {
         this.viewSessions?.delete(sessionView);
         this.viewSessionVersions?.delete(sessionView);
       });
-      legacyUpdateAllMarkdownViews.call(this);
+
+      // Workspace refresh events are noisy. If the structural signature and both
+      // adopted DOM owners are unchanged, keep the session, tooltip, observer,
+      // and scroll listener alive instead of routing through legacy teardown.
+      leaves.forEach((leaf) => {
+        const view = leaf?.view;
+        if (!view || typeof view !== 'object') return;
+        const typedView = view as { contentEl?: HTMLElement };
+        const container = typedView.contentEl;
+        const mountedStepper = container?.querySelector('.codex-stepper-container') as HTMLElement | null;
+        const isReading = container ? this.isReadingMode?.(view, container) === true : false;
+        const mountedTrackingContainer = container
+          ? (isReading
+            ? this.getViewScroller?.(container, view) ?? (container.querySelector('.markdown-preview-view') as HTMLElement | null)
+            : this.getViewScroller?.(container, view) ?? (container.querySelector('.cm-scroller') as HTMLElement | null))
+          : null;
+        const renderSignature = buildViewRenderSignature(this, view);
+        if (canReuseRenderedSession(
+          this.viewSessions?.get(view),
+          renderSignature,
+          mountedStepper,
+          mountedTrackingContainer
+        )) return;
+        void prototype.attachStepperToView?.call(this, view);
+      });
     };
   }
 

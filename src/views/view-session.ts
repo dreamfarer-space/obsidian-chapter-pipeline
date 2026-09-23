@@ -74,6 +74,7 @@ export interface ViewSessionOptions {
   stepperElement: HTMLElement;
   dashElements: HTMLElement[];
   tooltipElement?: HTMLElement | null;
+  renderSignature?: string;
   hierarchyMode?: HierarchyMode;
   findReadingHeading?: (chapter: ChapterNode) => Element | null;
   onSelectChapter: (chapter: ChapterNode) => void;
@@ -95,6 +96,8 @@ export class ViewSession {
   readonly stepper: StepperView;
   readonly tooltip: TooltipManager | null;
   readonly tracker: ViewSessionTracker;
+  readonly renderSignature: string;
+  readonly trackingContainer: HTMLElement;
 
   private chapters: ChapterNode[];
   private activeIndex = -1;
@@ -103,6 +106,8 @@ export class ViewSession {
   constructor(private readonly options: ViewSessionOptions) {
     this.view = options.view;
     this.mode = options.mode;
+    this.renderSignature = options.renderSignature ?? '';
+    this.trackingContainer = options.container;
     this.chapters = options.chapters;
 
     this.stepper = new StepperView({
