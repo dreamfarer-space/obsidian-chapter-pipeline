@@ -1,6 +1,13 @@
 import { ChapterParser } from './core/parser';
 import { SoundEngine } from './core/sound';
-import { ReadingStorage } from './core/storage';
+import { ReadingStorage, normalizeReadingState } from './core/storage';
+import {
+  chapterIdentityEquals,
+  createChapterIdentity,
+  createChapterMarkerKey,
+  normalizeChapterIdentity,
+  resolveChapterIdentity
+} from './core/reading-identity';
 import { LivePreviewTracker } from './views/live-preview-tracker';
 import { ReadingViewTracker } from './views/reading-view-tracker';
 import { ViewSession } from './views/view-session';
@@ -10,7 +17,7 @@ import { TooltipManager } from './ui/tooltip';
 import { ChapterSuggestModal as TypedChapterSuggestModal } from './ui/modal';
 import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './ui/settings-tab';
 import { applyRuntimePerformancePatches } from './runtime-performance';
-import type { ChapterNode } from './types';
+import type { ChapterMarker, ChapterNode, FileLike, ReadingFileState } from './types';
 
 interface LegacyScrollBinding {
   scrollers?: Array<{ removeEventListener?: (...args: unknown[]) => void }>;
@@ -20,19 +27,27 @@ interface LegacyScrollBinding {
 
 interface ProductionPlugin {
   settings?: Record<string, unknown>;
-  soundEngine?: { playScrollTick?: (volume: number) => void };
+  soundEngine?: { playScrollTick?: (volume: number) => void; playClick?: (volume: number) => void };
   scrollBindings?: Map<unknown, LegacyScrollBinding>;
   viewSessions?: Map<object, ViewSession>;
   viewSessionVersions?: Map<object, number>;
   viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
+  fileChapterSnapshots?: Map<string, ChapterNode[]>;
   viewTooltips?: Map<object, HTMLElement>;
-  app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
+  app?: {
+    workspace?: {
+      getLeavesOfType?: (type: string) => Array<{ view?: object }>;
+      getActiveViewOfType?: (viewType: unknown) => object | null;
+    };
+  };
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
   getViewScroller?: (container: HTMLElement, view: object) => HTMLElement | null;
   isReadingMode?: (view: object, container?: HTMLElement | null) => boolean;
   jumpToHeading?: (view: object, chapter: ChapterNode) => void;
-  recordReadingPosition?: (view: object, chapter: ChapterNode) => void;
+  recordReadingPosition?: (view: object, chapter: ChapterNode) => boolean;
 }
+
+type ReadingAwarePlugin = ProductionPlugin & Record<string, any>;
 
 // The legacy coordinator remains the compatibility boundary for product/UI
 // behavior while typed view sessions take over the real production scroll path.
@@ -46,6 +61,345 @@ const LegacyPlugin = require('./legacy-main.js') as {
 };
 
 applyRuntimePerformancePatches(LegacyPlugin as never);
+
+function filePathOf(fileOrPath: FileLike | string | null | undefined): string {
+  return typeof fileOrPath === 'string' ? fileOrPath : fileOrPath?.path || '';
+}
+
+function getIdentityChapters(
+  plugin: ReadingAwarePlugin,
+  fileOrPath: FileLike | string,
+  chapter?: ChapterNode,
+  view?: object
+): ChapterNode[] {
+  const path = filePathOf(fileOrPath);
+  const byFile = path ? plugin.fileChapterSnapshots?.get(path) : undefined;
+  if (byFile?.length) return byFile;
+  const byView = view ? plugin.viewChapterSnapshots?.get(view) : undefined;
+  if (byView?.length) return byView;
+  return chapter ? [chapter] : [];
+}
+
+function findChapterMarkerEntry(
+  plugin: ReadingAwarePlugin,
+  file: FileLike,
+  chapter: ChapterNode,
+  chapters: ChapterNode[]
+): { key: string; marker: ChapterMarker } | null {
+  const fileState = plugin.getReadingFileState?.(file, false) as ReadingFileState | null | undefined;
+  const markers = fileState?.markers;
+  if (!markers) return null;
+
+  const exact = markers[chapter.id];
+  if (exact) {
+    const identity = normalizeChapterIdentity(exact.identity);
+    if (!identity) {
+      exact.identity = createChapterIdentity(chapter, chapters.length ? chapters : [chapter]);
+      plugin.ensureReadingState?.();
+      plugin.scheduleReadingStateSave?.();
+      return { key: chapter.id, marker: exact };
+    }
+    const resolved = resolveChapterIdentity(identity, chapters);
+    if (resolved?.id === chapter.id) return { key: chapter.id, marker: exact };
+  }
+
+  for (const [key, marker] of Object.entries(markers)) {
+    if (key === chapter.id) continue;
+    const identity = normalizeChapterIdentity(marker.identity);
+    if (!identity) continue;
+    const resolved = resolveChapterIdentity(identity, chapters);
+    if (resolved?.id === chapter.id) return { key, marker };
+  }
+  return null;
+}
+
+/**
+ * Install v2 persisted chapter identities on the production compatibility
+ * coordinator. This deliberately lives at the compatibility boundary so the
+ * real Obsidian path and the typed storage module share the same schema.
+ */
+function installReadingIdentityPersistence(): void {
+  const prototype = LegacyPlugin.prototype as ReadingAwarePlugin;
+  if (prototype.__readingIdentityV2Installed) return;
+  prototype.__readingIdentityV2Installed = true;
+
+  prototype.loadSettings = async function (this: ReadingAwarePlugin): Promise<void> {
+    const defaults = this.settings && typeof this.settings === 'object' ? this.settings : {};
+    const loaded = await this.loadData?.();
+    const loadedSettings = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
+    this.settings = Object.assign({}, defaults, loadedSettings);
+
+    if (this.settings.showExcerpt === undefined) this.settings.showExcerpt = true;
+    if (typeof this.settings.excerptLength !== 'number' || this.settings.excerptLength < 60 || this.settings.excerptLength > 300) {
+      this.settings.excerptLength = 140;
+    }
+    if (this.settings.activeColor === '#10b981') this.settings.activeColor = '#3b82f6';
+    if (!this.settings.customActiveColor) this.settings.customActiveColor = '#3b82f6';
+    if (this.settings.enableSound === undefined) this.settings.enableSound = true;
+    if (this.settings.soundVolume === undefined) this.settings.soundVolume = 50;
+    if (!this.settings.dockPosition) this.settings.dockPosition = 'left';
+    if (!this.settings.hierarchyMode) this.settings.hierarchyMode = 'hover-expand';
+    if (this.settings.showProgressRail === undefined) this.settings.showProgressRail = false;
+    if (this.settings.tooltipGlassmorphism === undefined) this.settings.tooltipGlassmorphism = true;
+    if (this.settings.showChapterOrder === undefined) this.settings.showChapterOrder = false;
+    if (this.settings.readingBookmarksEnabled === undefined) this.settings.readingBookmarksEnabled = false;
+
+    this.settings.readingState = normalizeReadingState(this.settings.readingState);
+    await this.saveSettings?.();
+  };
+
+  prototype.ensureReadingState = function (this: ReadingAwarePlugin) {
+    const state = this.settings?.readingState;
+    const invalid = !state || typeof state !== 'object' || Array.isArray(state) ||
+      !(state as Record<string, unknown>).files ||
+      typeof (state as Record<string, unknown>).files !== 'object' ||
+      Array.isArray((state as Record<string, unknown>).files);
+    if (invalid || (state as { version?: number } | undefined)?.version !== 2) {
+      if (!this.settings) this.settings = {};
+      this.settings.readingState = normalizeReadingState(state);
+    }
+    return this.settings?.readingState;
+  };
+
+  const legacyAttach = prototype.attachStepperToView;
+  if (typeof legacyAttach === 'function') {
+    prototype.attachStepperToView = async function (this: ReadingAwarePlugin, view: object): Promise<void> {
+      await legacyAttach.call(this, view);
+      const typedView = view as { file?: FileLike };
+      const path = typedView.file?.path;
+      const chapters = this.viewChapterSnapshots?.get(view);
+      if (path && chapters?.length) {
+        this.fileChapterSnapshots ??= new Map<string, ChapterNode[]>();
+        this.fileChapterSnapshots.set(path, chapters);
+      }
+    };
+  }
+
+  const legacyGetAllChapters = prototype.getAllChaptersForView;
+  if (typeof legacyGetAllChapters === 'function') {
+    prototype.getAllChaptersForView = async function (this: ReadingAwarePlugin, view: object): Promise<ChapterNode[]> {
+      const chapters = await legacyGetAllChapters.call(this, view) as ChapterNode[];
+      const typedView = view as { file?: FileLike };
+      if (typedView?.file?.path && chapters.length) {
+        this.fileChapterSnapshots ??= new Map<string, ChapterNode[]>();
+        this.fileChapterSnapshots.set(typedView.file.path, chapters);
+      }
+      return chapters;
+    };
+  }
+
+  prototype.getChapterMarkers = function (
+    this: ReadingAwarePlugin,
+    file: FileLike,
+    chapter: ChapterNode
+  ): ChapterMarker | null {
+    if (!file || !chapter?.id) return null;
+    const chapters = getIdentityChapters(this, file, chapter);
+    return findChapterMarkerEntry(this, file, chapter, chapters)?.marker ?? null;
+  };
+
+  prototype.recordReadingPosition = function (
+    this: ReadingAwarePlugin,
+    view: object,
+    chapter: ChapterNode
+  ): boolean {
+    const typedView = view as { file?: FileLike };
+    if (!this.isReadingBookmarksEnabled?.() || !this.isActiveMarkdownView?.(view) || !typedView.file || !chapter?.id) {
+      return false;
+    }
+
+    const fileState = this.getReadingFileState?.(typedView.file, true) as ReadingFileState | null;
+    if (!fileState) return false;
+    const chapters = getIdentityChapters(this, typedView.file, chapter, view);
+    const identity = createChapterIdentity(chapter, chapters);
+    this.ensureReadingState?.();
+
+    if (fileState.resume?.chapterId === chapter.id) {
+      if (!chapterIdentityEquals(fileState.resume.identity, identity)) {
+        fileState.resume.identity = identity;
+        fileState.resume.title = chapter.title || chapter.rawHeading || fileState.resume.title || '';
+        this.scheduleReadingStateSave?.();
+      }
+      return false;
+    }
+
+    fileState.resume = {
+      chapterId: chapter.id,
+      title: chapter.title || chapter.rawHeading || '',
+      updatedAt: Date.now(),
+      identity
+    };
+    this.scheduleReadingStateSave?.();
+    return true;
+  };
+
+  prototype.resumeLastChapter = async function (this: ReadingAwarePlugin, view?: object): Promise<boolean> {
+    if (!this.isReadingBookmarksEnabled?.()) return false;
+    const targetView = view && (view as { file?: FileLike }).file
+      ? view
+      : this.app?.workspace?.getActiveViewOfType?.(null);
+    const file = (targetView as { file?: FileLike } | null)?.file;
+    if (!targetView || !file) return false;
+
+    const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
+    const savedResume = fileState?.resume;
+    if (!savedResume?.chapterId) {
+      this.showNotice?.(this.translateReadingString?.('resumeUnavailable') ?? 'No saved reading position in this note.');
+      return false;
+    }
+
+    const chapters = await this.getAllChaptersForView?.(targetView) as ChapterNode[];
+    const identity = normalizeChapterIdentity(savedResume.identity);
+    const targetChapter = identity
+      ? resolveChapterIdentity(identity, chapters)
+      : chapters.find((chapter) => chapter.id === savedResume.chapterId) ?? null;
+
+    if (!targetChapter) {
+      // Preserve unresolved v2 records so a temporary edit does not silently
+      // destroy a valid bookmark. Keep the legacy v1 cleanup behavior.
+      if (!identity && fileState) {
+        delete fileState.resume;
+        this.pruneReadingFileState?.(file);
+        await this.saveSettings?.();
+      }
+      this.showNotice?.(this.translateReadingString?.('resumeNotFound') ?? 'The saved chapter is no longer available.');
+      return false;
+    }
+
+    const refreshedIdentity = createChapterIdentity(targetChapter, chapters);
+    if (savedResume.chapterId !== targetChapter.id || !chapterIdentityEquals(savedResume.identity, refreshedIdentity)) {
+      savedResume.chapterId = targetChapter.id;
+      savedResume.title = targetChapter.title || targetChapter.rawHeading || savedResume.title || '';
+      savedResume.identity = refreshedIdentity;
+      this.ensureReadingState?.();
+      await this.saveSettings?.();
+    }
+
+    if (this.settings?.enableSound !== false) {
+      const volume = typeof this.settings?.soundVolume === 'number' ? this.settings.soundVolume : 50;
+      this.soundEngine?.playClick?.(volume);
+    }
+    this.jumpToHeading?.(targetView, targetChapter);
+    return true;
+  };
+
+  prototype.toggleChapterMarker = async function (
+    this: ReadingAwarePlugin,
+    view: object,
+    chapter: ChapterNode,
+    markerName: 'revisit' | 'important'
+  ): Promise<boolean> {
+    const file = (view as { file?: FileLike })?.file;
+    if (!this.isReadingBookmarksEnabled?.() || !file || !chapter?.id || !['revisit', 'important'].includes(markerName)) {
+      return false;
+    }
+
+    const fileState = this.getReadingFileState?.(file, true) as ReadingFileState | null;
+    if (!fileState) return false;
+    const chapters = await this.getAllChaptersForView?.(view) as ChapterNode[];
+    const identityChapter = chapters.find((candidate) => candidate.id === chapter.id) ?? chapter;
+    const identity = createChapterIdentity(identityChapter, chapters.length ? chapters : [chapter]);
+    const existing = findChapterMarkerEntry(this, file, chapter, chapters.length ? chapters : [chapter]);
+    const current: ChapterMarker = existing
+      ? { ...existing.marker }
+      : { revisit: false, important: false };
+    current[markerName] = !current[markerName];
+
+    if (existing) delete fileState.markers[existing.key];
+    if (current.revisit || current.important) {
+      current.identity = identity;
+      const key = createChapterMarkerKey(identity) || chapter.id;
+      fileState.markers[key] = current;
+    } else {
+      this.pruneReadingFileState?.(file);
+    }
+
+    this.ensureReadingState?.();
+    await this.saveSettings?.();
+    this.updateAllMarkdownViews?.();
+    return current[markerName];
+  };
+
+  prototype.clearChapterMarkers = async function (
+    this: ReadingAwarePlugin,
+    view: object,
+    chapter: ChapterNode
+  ): Promise<boolean> {
+    const file = (view as { file?: FileLike })?.file;
+    if (!file || !chapter?.id) return false;
+    const chapters = getIdentityChapters(this, file, chapter, view);
+    const entry = findChapterMarkerEntry(this, file, chapter, chapters);
+    if (!entry) return false;
+    const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
+    if (!fileState) return false;
+    delete fileState.markers[entry.key];
+    this.pruneReadingFileState?.(file);
+    await this.saveSettings?.();
+    this.updateAllMarkdownViews?.();
+    return true;
+  };
+
+  prototype.mergeReadingFileStates = function (
+    this: ReadingAwarePlugin,
+    destinationState?: ReadingFileState,
+    sourceState?: ReadingFileState
+  ): ReadingFileState {
+    const merged: ReadingFileState = { markers: {} };
+    for (const state of [destinationState, sourceState].filter(Boolean) as ReadingFileState[]) {
+      for (const [key, marker] of Object.entries(state.markers || {})) {
+        const current = merged.markers[key] || { revisit: false, important: false };
+        current.revisit = current.revisit || marker.revisit === true;
+        current.important = current.important || marker.important === true;
+        if (!current.identity) current.identity = normalizeChapterIdentity(marker.identity);
+        merged.markers[key] = current;
+      }
+    }
+
+    const destinationResume = destinationState?.resume;
+    const sourceResume = sourceState?.resume;
+    if (destinationResume || sourceResume) {
+      const newerSource = sourceResume && (!destinationResume || sourceResume.updatedAt > destinationResume.updatedAt);
+      merged.resume = { ...(newerSource ? sourceResume : destinationResume)! };
+    }
+    return merged;
+  };
+
+  prototype.maybeShowResumeNotice = function (
+    this: ReadingAwarePlugin,
+    view: object,
+    content: string,
+    file: FileLike
+  ): void {
+    if (!this.isReadingBookmarksEnabled?.() || !this.isActiveMarkdownView?.(view) || !file?.path || this.resumePromptedPaths?.has(file.path)) {
+      return;
+    }
+    const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
+    const savedResume = fileState?.resume;
+    if (!savedResume?.chapterId) return;
+
+    this.resumePromptedPaths?.add(file.path);
+    const chapters = this.extractAllChapters?.(content, file) as ChapterNode[];
+    this.fileChapterSnapshots ??= new Map<string, ChapterNode[]>();
+    this.fileChapterSnapshots.set(file.path, chapters);
+    const identity = normalizeChapterIdentity(savedResume.identity);
+    const chapter = identity
+      ? resolveChapterIdentity(identity, chapters)
+      : chapters.find((item) => item.id === savedResume.chapterId) ?? null;
+
+    if (chapter) {
+      if (!identity) {
+        savedResume.identity = createChapterIdentity(chapter, chapters);
+        this.ensureReadingState?.();
+        this.scheduleReadingStateSave?.();
+      }
+      const title = chapter.title || savedResume.title;
+      const message = this.translateReadingString?.('resumeAvailable', { title }) ?? `Resume available: ${title}`;
+      this.showNotice?.(message);
+    }
+  };
+}
+
+installReadingIdentityPersistence();
 
 /** Remove the compatibility renderer's scroll listener before typed tracking takes ownership. */
 function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {
@@ -187,6 +541,7 @@ function installTypedProductionSessions(): void {
     this.viewSessions?.forEach((session) => session.dispose());
     this.viewSessions?.clear();
     this.viewSessionVersions?.clear();
+    this.fileChapterSnapshots?.clear();
     legacyUnload?.call(this);
   };
 }
@@ -208,6 +563,9 @@ PublicPlugin.StepperView = StepperView;
 PublicPlugin.TooltipManager = TooltipManager;
 PublicPlugin.TypedChapterSuggestModal = TypedChapterSuggestModal;
 PublicPlugin.TypedChapterPipelineSettingTab = TypedChapterPipelineSettingTab;
+PublicPlugin.createChapterIdentity = createChapterIdentity;
+PublicPlugin.resolveChapterIdentity = resolveChapterIdentity;
+PublicPlugin.normalizeChapterIdentity = normalizeChapterIdentity;
 
 // Obsidian loads plugins through module.exports. `export =` preserves the same
 // shape for Node-based tests and for the production bundle.
