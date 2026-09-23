@@ -4,7 +4,7 @@ import { normalizeHeadingText } from './core/parser';
 // Small runtime patch layer for the remaining legacy coordinator. These patches
 // intentionally target the production prototype so they affect the bundled
 // plugin while the coordinator continues its incremental TypeScript migration.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-var-requires -- Load the legacy helper module while the runtime patch layer is migrated to typed modules.
 const {
   hashHeadingSequence,
   nextCalibrationState
@@ -360,10 +360,10 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
 
     const result = await originalAttachStepperToView.call(this, view);
     const tooltip = this.viewTooltips?.get?.(view);
-    if (tooltip?.style) {
+    if (tooltip?.classList) {
       // A plugin-local layer above note content without dominating app chrome,
       // menus, modals, or other global overlays.
-      tooltip.style.zIndex = '200';
+      tooltip.classList.add('codex-floating-tooltip--view-layer');
     }
     return result;
   };

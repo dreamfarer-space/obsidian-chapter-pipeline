@@ -46,7 +46,7 @@ interface ProductionPlugin {
 
 // The legacy coordinator remains the compatibility boundary for product/UI
 // behavior while typed view sessions take over the real production scroll path.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
+// eslint-disable-next-line @typescript-eslint/no-var-requires -- Keep the legacy coordinator as the CommonJS compatibility boundary until its migration is complete.
 const LegacyPlugin = require('./legacy-main.js') as {
   new (...args: unknown[]): ProductionPlugin;
   prototype: ProductionPlugin & Record<string, unknown>;

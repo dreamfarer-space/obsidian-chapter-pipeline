@@ -332,6 +332,10 @@ body .workspace-leaf .cm-highlight {
   gap: 5px;
 }
 
+.codex-floating-tooltip.codex-floating-tooltip--view-layer {
+  z-index: 200;
+}
+
 .theme-dark .codex-floating-tooltip {
   background: rgba(26, 27, 30, 0.82);
   border-color: rgba(255, 255, 255, 0.1);
