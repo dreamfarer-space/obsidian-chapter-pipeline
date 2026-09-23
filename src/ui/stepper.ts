@@ -15,19 +15,23 @@ export function updateHierarchyFolding(
   dashElements: HierarchyElement[],
   activeIdx: number,
   hierarchyMode: HierarchyMode | string = 'all',
-  keyboardExpanded = false
+  keyboardExpanded = false,
+  pointerExpanded = false
 ): void {
   if (!chapters || !dashElements?.length) return;
+
+  const setReachable = (element: HierarchyElement, reachable: boolean): void => {
+    element.setAttribute('tabindex', reachable ? '0' : '-1');
+    element.setAttribute('aria-hidden', reachable ? 'false' : 'true');
+  };
 
   const setCollapsed = (element: HierarchyElement, collapsed: boolean): void => {
     if (collapsed) {
       element.classList.add(DOM_CLASSES.collapsed);
-      element.setAttribute('tabindex', '-1');
-      element.setAttribute('aria-hidden', 'true');
+      setReachable(element, false);
     } else {
       element.classList.remove(DOM_CLASSES.collapsed);
-      element.setAttribute('tabindex', '0');
-      element.setAttribute('aria-hidden', 'false');
+      setReachable(element, true);
     }
   };
 
@@ -39,7 +43,19 @@ export function updateHierarchyFolding(
   if (hierarchyMode === 'hover-expand') {
     dashElements.forEach((element, index) => {
       const isDeepHeading = chapters[index]?.level >= 3;
-      setCollapsed(element, isDeepHeading && !keyboardExpanded);
+      if (!isDeepHeading) {
+        setCollapsed(element, false);
+      } else if (keyboardExpanded) {
+        // Keyboard expansion must remove the collapsed class because unlike
+        // pointer hover it cannot rely on the existing :hover CSS selector.
+        setCollapsed(element, false);
+      } else {
+        // Keep the collapsed class during pointer hover so the existing hover
+        // transition/opacity remains unchanged, while exposing the item to the
+        // tab order and accessibility tree for the duration of that expansion.
+        element.classList.add(DOM_CLASSES.collapsed);
+        setReachable(element, pointerExpanded);
+      }
     });
     return;
   }
@@ -93,6 +109,7 @@ export class StepperView {
   private activeIndex = -1;
   private hierarchyMode: HierarchyMode;
   private keyboardExpanded = false;
+  private pointerExpanded = false;
 
   private readonly handleFocusIn = (): void => {
     if (this.hierarchyMode !== 'hover-expand' || this.keyboardExpanded) return;
@@ -105,6 +122,20 @@ export class StepperView {
     const nextTarget = event.relatedTarget;
     if (nextTarget && this.element.contains?.(nextTarget as Node)) return;
     this.keyboardExpanded = false;
+    this.syncHierarchy();
+  };
+
+  private readonly handlePointerOver = (): void => {
+    if (this.hierarchyMode !== 'hover-expand' || this.pointerExpanded) return;
+    this.pointerExpanded = true;
+    this.syncHierarchy();
+  };
+
+  private readonly handlePointerOut = (event: PointerEvent): void => {
+    if (this.hierarchyMode !== 'hover-expand' || !this.pointerExpanded) return;
+    const nextTarget = event.relatedTarget;
+    if (nextTarget && this.element.contains?.(nextTarget as Node)) return;
+    this.pointerExpanded = false;
     this.syncHierarchy();
   };
 
@@ -124,6 +155,8 @@ export class StepperView {
 
     this.element.addEventListener('focusin', this.handleFocusIn);
     this.element.addEventListener('focusout', this.handleFocusOut);
+    this.element.addEventListener('pointerover', this.handlePointerOver);
+    this.element.addEventListener('pointerout', this.handlePointerOut);
     this.syncHierarchy();
   }
 
@@ -147,6 +180,7 @@ export class StepperView {
     if (this.hierarchyMode !== mode) {
       this.hierarchyMode = mode;
       this.keyboardExpanded = false;
+      this.pointerExpanded = false;
     }
     this.syncHierarchy();
   }
@@ -157,8 +191,9 @@ export class StepperView {
       // The rail itself is the keyboard entry point. Focusing it expands H3+
       // before focus advances into those descendants, including documents that
       // contain only deep headings.
+      const expanded = this.keyboardExpanded || this.pointerExpanded;
       this.element.setAttribute('tabindex', '0');
-      this.element.setAttribute('aria-expanded', this.keyboardExpanded ? 'true' : 'false');
+      this.element.setAttribute('aria-expanded', expanded ? 'true' : 'false');
       if (this.keyboardExpanded) this.element.classList.add('is-keyboard-expanded');
       else this.element.classList.remove('is-keyboard-expanded');
     } else {
@@ -172,13 +207,16 @@ export class StepperView {
       this.dashElements,
       this.activeIndex,
       this.hierarchyMode,
-      this.keyboardExpanded
+      this.keyboardExpanded,
+      this.pointerExpanded
     );
   }
 
   dispose(): void {
     this.element.removeEventListener('focusin', this.handleFocusIn);
     this.element.removeEventListener('focusout', this.handleFocusOut);
+    this.element.removeEventListener('pointerover', this.handlePointerOver);
+    this.element.removeEventListener('pointerout', this.handlePointerOut);
     this.dashElements.length = 0;
     this.element.remove();
   }
