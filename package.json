@@ -1,5 +1,5 @@
 {
-  "name": "obsidian-charter-pipeline",
+  "name": "obsidian-chapter-pipeline",
   "version": "1.2.1",
   "description": "Minimalist Linear-style floating horizontal dash stepper with KaTeX formula preview and pinned top navigation for Obsidian.",
   "main": "main.js",
@@ -23,12 +23,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dreamfarer-space/obsidian-charter-pipeline.git"
+    "url": "git+https://github.com/dreamfarer-space/obsidian-chapter-pipeline.git"
   },
   "bugs": {
-    "url": "https://github.com/dreamfarer-space/obsidian-charter-pipeline/issues"
+    "url": "https://github.com/dreamfarer-space/obsidian-chapter-pipeline/issues"
   },
-  "homepage": "https://github.com/dreamfarer-space/obsidian-charter-pipeline#readme",
+  "homepage": "https://github.com/dreamfarer-space/obsidian-chapter-pipeline#readme",
   "devDependencies": {
     "@types/node": "^26.6.2",
     "esbuild": "^0.28.2",

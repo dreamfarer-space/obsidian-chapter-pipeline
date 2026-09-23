@@ -170,8 +170,8 @@ function resolveReadingHeading(
 
 export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstructor): void {
   const proto = LegacyPlugin.prototype;
-  if (proto.__charterIssue14Patched) return;
-  proto.__charterIssue14Patched = true;
+  if (proto.__chapterIssue14Patched) return;
+  proto.__chapterIssue14Patched = true;
 
   const originalLoadSettings = proto.loadSettings;
   proto.loadSettings = async function patchedLoadSettings(...args: unknown[]) {
@@ -229,8 +229,8 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     try {
       const result = await originalOnload.apply(this, args);
       const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
-      if (playScrollTick && !this.soundEngine.__charterScrollSoundGuarded) {
-        this.soundEngine.__charterScrollSoundGuarded = true;
+      if (playScrollTick && !this.soundEngine.__chapterScrollSoundGuarded) {
+        this.soundEngine.__chapterScrollSoundGuarded = true;
         this.soundEngine.playScrollTick = (volume: number) => {
           if (this.settings?.enableScrollSound === true) playScrollTick(volume);
         };

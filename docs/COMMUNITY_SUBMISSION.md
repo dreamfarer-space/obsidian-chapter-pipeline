@@ -1,12 +1,12 @@
 # Obsidian Community Plugins submission checklist
 
-This document records the release decisions and the manual verification gate for submitting Charter Pipeline to the Obsidian Community Plugins directory.
+This document records the release decisions and the manual verification gate for submitting Chapter Pipeline to the Obsidian Community Plugins directory.
 
 ## Final plugin identity
 
-- Display name: `Charter Pipeline`
+- Display name: `Chapter Pipeline`
 - Plugin ID: `chapter-pipeline`
-- Repository: `dreamfarer-space/obsidian-charter-pipeline`
+- Repository: `dreamfarer-space/obsidian-chapter-pipeline`
 - Required release assets: `main.js`, `manifest.json`, `styles.css`
 - Release tag: exactly the version from `manifest.json` (for example `1.2.1`, with no `v` prefix)
 
@@ -34,7 +34,7 @@ If the declared minimum cannot pass the desktop smoke test, raise `minAppVersion
 1. Confirm `manifest.json`, `package.json`, and `versions.json` agree on the release version/compatibility mapping.
 2. Run `npm ci`, `npm audit --audit-level=moderate`, `npx --no-install tsc --noEmit`, `npm test`, and `npm run build`.
 3. Confirm the committed `main.js` matches the production build.
-4. Confirm the production bundle contains no `Charter Pipeline Pro` startup/debug branding.
+4. Confirm the production bundle contains no `Chapter Pipeline Pro` startup/debug branding.
 5. Confirm the GitHub release tag is the exact manifest version and includes `main.js`, `manifest.json`, and `styles.css` as individual assets.
 6. Confirm README installation instructions describe the distribution path that is actually available before Community Plugins approval (BRAT/manual release install).
 7. Complete and record the manual desktop/mobile smoke-test matrix above.

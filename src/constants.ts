@@ -38,7 +38,7 @@ export type I18nDictionary = Record<string, string>;
 /** UI copy kept in one module so future translations do not touch behavior. */
 export const I18N: Record<Locale, I18nDictionary> = {
   en: {
-    tabTitle: 'Charter Pipeline Settings',
+    tabTitle: 'Chapter Pipeline Settings',
     searchPlaceholder: 'Search chapter or formula...',
     revisitLabel: 'Revisit',
     importantLabel: 'Important',
@@ -48,17 +48,17 @@ export const I18N: Record<Locale, I18nDictionary> = {
     readingBookmarksCleared: 'Reading progress and bookmarks cleared for this note.',
     cleanupSuccessNotice: 'Cleaned up {count} invalid note record(s).',
     cleanupNoneNotice: 'No invalid records found. Everything is up to date.',
-    commandJumpPrev: 'Charter Pipeline: Jump to previous chapter',
-    commandJumpNext: 'Charter Pipeline: Jump to next chapter',
-    commandOpenPalette: 'Charter Pipeline: Search & switch chapter (Palette)',
-    commandResumeLastChapter: 'Charter Pipeline: Resume last chapter',
-    commandToggleRevisit: 'Charter Pipeline: Toggle revisit bookmark for current chapter',
-    commandToggleImportant: 'Charter Pipeline: Toggle important bookmark for current chapter',
-    commandClearReadingBookmarks: 'Charter Pipeline: Clear reading progress & bookmarks for current note',
-    commandCleanupReadingBookmarks: 'Charter Pipeline: Clean up invalid reading progress & bookmarks'
+    commandJumpPrev: 'Chapter Pipeline: Jump to previous chapter',
+    commandJumpNext: 'Chapter Pipeline: Jump to next chapter',
+    commandOpenPalette: 'Chapter Pipeline: Search & switch chapter (Palette)',
+    commandResumeLastChapter: 'Chapter Pipeline: Resume last chapter',
+    commandToggleRevisit: 'Chapter Pipeline: Toggle revisit bookmark for current chapter',
+    commandToggleImportant: 'Chapter Pipeline: Toggle important bookmark for current chapter',
+    commandClearReadingBookmarks: 'Chapter Pipeline: Clear reading progress & bookmarks for current note',
+    commandCleanupReadingBookmarks: 'Chapter Pipeline: Clean up invalid reading progress & bookmarks'
   },
   zh: {
-    tabTitle: 'Charter Pipeline 设置',
+    tabTitle: 'Chapter Pipeline 设置',
     searchPlaceholder: '搜索章节或公式…',
     revisitLabel: '稍后回看',
     importantLabel: '重点',
@@ -68,14 +68,14 @@ export const I18N: Record<Locale, I18nDictionary> = {
     readingBookmarksCleared: '已清除本笔记的阅读断点与书签。',
     cleanupSuccessNotice: '已清理 {count} 条失效笔记的记录。',
     cleanupNoneNotice: '未发现失效记录，当前配置非常整洁。',
-    commandJumpPrev: 'Charter Pipeline：跳转至上一章节',
-    commandJumpNext: 'Charter Pipeline：跳转至下一章节',
-    commandOpenPalette: 'Charter Pipeline：搜索并快速跳转章节',
-    commandResumeLastChapter: 'Charter Pipeline：恢复上次阅读章节',
-    commandToggleRevisit: 'Charter Pipeline：切换当前章节的稍后回看书签',
-    commandToggleImportant: 'Charter Pipeline：切换当前章节的重点书签',
-    commandClearReadingBookmarks: 'Charter Pipeline：清除当前笔记的阅读断点与书签',
-    commandCleanupReadingBookmarks: 'Charter Pipeline：清理已失效阅读断点与书签'
+    commandJumpPrev: 'Chapter Pipeline：跳转至上一章节',
+    commandJumpNext: 'Chapter Pipeline：跳转至下一章节',
+    commandOpenPalette: 'Chapter Pipeline：搜索并快速跳转章节',
+    commandResumeLastChapter: 'Chapter Pipeline：恢复上次阅读章节',
+    commandToggleRevisit: 'Chapter Pipeline：切换当前章节的稍后回看书签',
+    commandToggleImportant: 'Chapter Pipeline：切换当前章节的重点书签',
+    commandClearReadingBookmarks: 'Chapter Pipeline：清除当前笔记的阅读断点与书签',
+    commandCleanupReadingBookmarks: 'Chapter Pipeline：清理已失效阅读断点与书签'
   }
 };
 

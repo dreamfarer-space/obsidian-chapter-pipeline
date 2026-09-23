@@ -21,5 +21,5 @@ if (production) {
 } else {
   const watchContext = await context(options);
   await watchContext.watch();
-  console.log('Charter Pipeline development build watching src/.');
+  console.log('Chapter Pipeline development build watching src/.');
 }

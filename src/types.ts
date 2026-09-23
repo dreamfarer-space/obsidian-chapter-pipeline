@@ -1,4 +1,4 @@
-/** Shared domain types for the Charter Pipeline modules. */
+/** Shared domain types for the Chapter Pipeline modules. */
 
 export type DockPosition = 'left' | 'right';
 export type HierarchyMode = 'all' | 'hover-expand' | 'active-branch';
