@@ -44,6 +44,15 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Reject legacy naming residue
+        shell: bash
+        run: |
+          LEGACY="char""ter"
+          if git grep -ni "$LEGACY" -- .; then
+            echo "Repository contains legacy naming residue" >&2
+            exit 1
+          fi
+
       - name: Reject production Pro/debug branding
         run: |
           if grep -Fq "Chapter Pipeline Pro" main.js; then
