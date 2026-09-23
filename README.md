@@ -8,7 +8,7 @@ Floating heading dashes · KaTeX previews · pinned-top navigation · reading bo
 
 [![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
-[![Obsidian](https://img.shields.io/badge/Declared%20min-0.15.0%20(test%20pending)-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
+[![Obsidian](https://img.shields.io/badge/Tested%20min-0.15.9-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -27,7 +27,7 @@ It is designed for long technical notes, research documents, study material, doc
 
 - **Community submission hardening** — release metadata, required assets, version mappings, and production bundle consistency are validated in CI and before publishing.
 - **Final Chapter Pipeline identity** — repository, display name, plugin ID, and release packaging are aligned, while legacy runtime `Pro` debug branding is removed.
-- **Safer compatibility claims** — mobile distribution stays disabled until Android/iOS testing is completed, and the declared desktop minimum is explicitly treated as pending real-app verification.
+- **Verified desktop compatibility** — the packaged plugin passed real-app smoke tests on Obsidian Desktop `0.15.9` and public stable `1.13.7`; mobile remains intentionally disabled until Android/iOS testing is completed.
 - **Clean release lineage** — `1.2.2` uses the exact manifest version as its tag and avoids the historical `v1.2.1` / `1.2.1` release collision.
 
 See [Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases) for the full version history.
@@ -180,7 +180,7 @@ Architecture and implementation notes live in [`docs/`](docs/):
 
 ## Compatibility verification
 
-`minAppVersion` is currently declared as `0.15.0`, but that exact minimum must still pass the real desktop smoke-test matrix in [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) before the Community Plugins submission is opened. Android/iOS support is not currently claimed.
+`minAppVersion` is `0.15.9`, verified on 2026-09-23 by loading the packaged plugin in the official Obsidian Desktop `0.15.9` AppImage. The same smoke matrix also passed on public stable `1.13.7`. See [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) for the recorded matrix. Android/iOS support is not currently claimed.
 
 ## Privacy
 
