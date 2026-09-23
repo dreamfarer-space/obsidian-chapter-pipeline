@@ -8,7 +8,7 @@ Floating heading dashes · KaTeX previews · pinned-top navigation · reading bo
 
 [![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
-[![Obsidian](https://img.shields.io/badge/Obsidian-%E2%89%A5%200.15.0-7c3aed?style=flat-square&logo=obsidian)](https://obsidian.md)
+[![Obsidian](https://img.shields.io/badge/Declared%20min-0.15.0%20(test%20pending)-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -23,13 +23,12 @@ Chapter Pipeline turns long Obsidian notes into a compact, margin-mounted naviga
 
 It is designed for long technical notes, research documents, study material, documentation, and any workflow where you want fast chapter navigation without giving up screen space.
 
-## What's new in v1.2.1
+## What's new in 1.2.2
 
-- **Faster large-note scroll tracking** — Reading View now caches resolved headings and advances from the previous active chapter instead of rescanning every heading on each frame.
-- **Cheaper Live Preview tracking** — rendered CodeMirror candidates are cached, active chapters are located with binary search, and unrelated DOM mutations no longer trigger full candidate rescans.
-- **Performance regression coverage** — dedicated tests exercise 1,000-heading documents and verify bounded DOM queries and geometry reads.
-- **Stronger repository automation** — CI now covers dependency auditing, strict TypeScript checks, tests, production builds, and generated-bundle consistency, alongside CodeQL, Dependabot, semantic PR checks, and CodeRabbit review.
-- **Cleaner documentation** — the English and Simplified Chinese documentation are now maintained as separate README files.
+- **Community submission hardening** — release metadata, required assets, version mappings, and production bundle consistency are validated in CI and before publishing.
+- **Final Chapter Pipeline identity** — repository, display name, plugin ID, and release packaging are aligned, while legacy runtime `Pro` debug branding is removed.
+- **Safer compatibility claims** — mobile distribution stays disabled until Android/iOS testing is completed, and the declared desktop minimum is explicitly treated as pending real-app verification.
+- **Clean release lineage** — `1.2.2` uses the exact manifest version as its tag and avoids the historical `v1.2.1` / `1.2.1` release collision.
 
 See [Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases) for the full version history.
 
@@ -178,6 +177,10 @@ Architecture and implementation notes live in [`docs/`](docs/):
 - [`PHASE3_COMPLIANCE_AUDIT.md`](docs/PHASE3_COMPLIANCE_AUDIT.md) — compliance and lifecycle audit
 - [`PHASE4_UI_UX.md`](docs/PHASE4_UI_UX.md) — UI/UX, motion, touch, and accessibility notes
 - [`COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) — release and compatibility checklist for Community Plugins submission
+
+## Compatibility verification
+
+`minAppVersion` is currently declared as `0.15.0`, but that exact minimum must still pass the real desktop smoke-test matrix in [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) before the Community Plugins submission is opened. Android/iOS support is not currently claimed.
 
 ## Privacy
 
