@@ -13,7 +13,7 @@
 
 [English](README.md) · **简体中文**
 
-<img src="assets/banner-zh.png" alt="Chapter Pipeline 中文横幅" width="100%" />
+<img src="assets/banner-zh.svg" alt="Chapter Pipeline 中文横幅，作者择梦舟" width="100%" />
 
 </div>
 

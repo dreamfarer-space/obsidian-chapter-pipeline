@@ -13,7 +13,7 @@ Floating heading dashes · KaTeX previews · pinned-top navigation · reading bo
 
 **English** · [简体中文](README.zh-CN.md)
 
-<img src="assets/banner-en.png" alt="Chapter Pipeline banner" width="100%" />
+<img src="assets/banner-en.svg" alt="Chapter Pipeline banner by 择梦舟" width="100%" />
 
 </div>
 
