@@ -5,7 +5,7 @@ const {
   hashHeadingSequence,
   nextCalibrationState,
   mergeSettingsWithLightweightDefaults
-} = require('./src/runtime-helpers.js');
+} = require('../src/runtime-helpers.js');
 
 function heading(title, level, line) {
   return { heading: title, level, position: { start: { line } } };

@@ -5,7 +5,7 @@ const test = require('node:test');
 const { buildSync } = require('esbuild');
 
 function loadRenderSignatureModule() {
-  const filename = path.join(__dirname, 'src/views/render-signature.ts');
+  const filename = path.join(__dirname, '../src/views/render-signature.ts');
   const result = buildSync({
     entryPoints: [filename],
     bundle: true,
@@ -91,8 +91,8 @@ function loadProductionPlugin() {
     }
     return originalLoad.call(this, request, parent, isMain);
   };
-  delete require.cache[require.resolve('./main.js')];
-  const ProductionPlugin = require('./main.js');
+  delete require.cache[require.resolve('../main.js')];
+  const ProductionPlugin = require('../main.js');
   Module._load = originalLoad;
   return { MarkdownView, ProductionPlugin };
 }
