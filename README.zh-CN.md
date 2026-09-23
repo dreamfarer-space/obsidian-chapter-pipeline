@@ -8,7 +8,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
-[![Obsidian](https://img.shields.io/badge/Obsidian-%E2%89%A5%200.15.0-7c3aed?style=flat-square&logo=obsidian)](https://obsidian.md)
+[![Obsidian](https://img.shields.io/badge/已实测最低版本-0.15.9-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 [English](README.md) · **简体中文**
@@ -23,13 +23,12 @@ Chapter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正�
 
 它尤其适合长篇技术笔记、论文与科研记录、考研/课程资料、项目文档，以及任何需要频繁在章节之间跳转、又不希望目录占据屏幕空间的场景。
 
-## v1.2.1 更新
+## 1.2.2 更新
 
-- **长笔记滚动追踪进一步提速**：阅读视图会缓存已经解析出的标题元素，并从上一次活动章节附近继续搜索，不再每帧从头扫描所有标题。
-- **Live Preview 开销更低**：缓存 CodeMirror 已渲染的章节候选项，使用二分搜索定位活动章节，并过滤无关 DOM mutation，避免频繁全量重扫。
-- **新增性能回归测试**：针对 1000 个标题的超长文档验证 DOM 查询次数与几何读取次数保持受控。
-- **仓库自动化完善**：CI 覆盖依赖审计、严格 TypeScript 检查、测试、生产构建与 `main.js` 一致性；同时启用 CodeQL、Dependabot、语义化 PR 检查和 CodeRabbit 审查。
-- **文档重新整理**：英文与简体中文 README 分离维护，主文档不再堆叠多代 changelog。
+- **社区插件提交加固**：CI 与发布流程会校验插件 ID、显示名称、版本映射、最低版本字段、必需发布资产以及生产 bundle 一致性。
+- **最终 Chapter Pipeline 身份统一**：仓库名、显示名称、插件 ID 与发布包对齐，同时移除遗留的 `Pro` 生命周期调试日志。
+- **桌面兼容性已实测**：打包后的插件已在真实 Obsidian Desktop `0.15.9` 与公开稳定版 `1.13.7` 中完成 smoke test；Android/iOS 尚未实测，因此暂不声明移动端支持。
+- **干净的发布版本线**：使用 `1.2.2` 作为与 manifest 完全一致的标签，避开历史 `v1.2.1` / `1.2.1` 双标签冲突。
 
 完整历史请查看 [GitHub Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)。
 
@@ -178,6 +177,10 @@ CI 还会验证生产构建后 `main.js` 不会出现未提交差异。
 - [`PHASE3_COMPLIANCE_AUDIT.md`](docs/PHASE3_COMPLIANCE_AUDIT.md)：合规与生命周期审计
 - [`PHASE4_UI_UX.md`](docs/PHASE4_UI_UX.md)：交互、动效、触屏与可访问性
 - [`COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)：社区插件发布、兼容性与移动端验证清单
+
+## 兼容性验证
+
+`minAppVersion` 现为 `0.15.9`。2026-09-23 已使用官方 Obsidian Desktop `0.15.9` AppImage 对打包插件完成真实加载测试；同一套 smoke matrix 也在公开稳定版 `1.13.7` 通过。完整记录见 [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)。当前不声明 Android/iOS 支持。
 
 ## 隐私
 
