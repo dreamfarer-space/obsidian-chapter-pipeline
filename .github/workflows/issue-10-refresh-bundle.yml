@@ -1,0 +1,48 @@
+name: Refresh issue 10 bundle
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build-test-commit:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'fix/issue-10-skip-rebuilds'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle before integration tests
+        run: npm run build
+
+      - name: Typecheck
+        run: npx --no-install tsc --noEmit
+
+      - name: Run tests
+        run: npm test
+
+      - name: Commit generated bundle and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/issue-10-refresh-bundle.yml
+          git add main.js
+          git commit -m "build: refresh issue 10 production bundle"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
