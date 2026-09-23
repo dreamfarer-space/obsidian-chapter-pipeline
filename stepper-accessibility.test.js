@@ -152,6 +152,45 @@ test('Focus mode expands deep headings for keyboard traversal and resets after f
   assert.equal(root.removed, true);
 });
 
+test('pointer hover keeps the existing collapsed CSS hook while synchronizing reachability', () => {
+  const { StepperView } = loadStepperModule();
+  const root = new FakeElement();
+  const dashes = [new FakeElement(), new FakeElement()];
+  dashes.forEach((dash) => root.append(dash));
+
+  const stepper = new StepperView({
+    container: new FakeElement(),
+    chapters: [chapter('H1', 1, 0), chapter('H3', 3, 1)],
+    onSelect() {},
+    hierarchyMode: 'hover-expand',
+    existingElement: root,
+    existingDashes: dashes,
+  });
+
+  assert.equal(dashes[1].classList.contains('is-collapsed'), true);
+  assert.equal(dashes[1].getAttribute('tabindex'), '-1');
+  assert.equal(dashes[1].getAttribute('aria-hidden'), 'true');
+
+  root.dispatch('pointerover', { target: dashes[0] });
+
+  assert.equal(root.getAttribute('aria-expanded'), 'true');
+  assert.equal(dashes[1].classList.contains('is-collapsed'), true,
+    'the existing :hover CSS selector must remain responsible for pointer visuals');
+  assert.equal(dashes[1].getAttribute('tabindex'), '0');
+  assert.equal(dashes[1].getAttribute('aria-hidden'), 'false');
+
+  root.dispatch('pointerout', { relatedTarget: dashes[0] });
+  assert.equal(root.getAttribute('aria-expanded'), 'true', 'moving the pointer inside the rail must not collapse state');
+
+  root.dispatch('pointerout', { relatedTarget: new FakeElement() });
+  assert.equal(root.getAttribute('aria-expanded'), 'false');
+  assert.equal(dashes[1].classList.contains('is-collapsed'), true);
+  assert.equal(dashes[1].getAttribute('tabindex'), '-1');
+  assert.equal(dashes[1].getAttribute('aria-hidden'), 'true');
+
+  stepper.dispose();
+});
+
 test('non-Focus hierarchy modes do not add an extra rail tab stop', () => {
   const { StepperView } = loadStepperModule();
   const root = new FakeElement();
