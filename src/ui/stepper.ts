@@ -103,7 +103,7 @@ export class StepperView {
   private readonly handleFocusOut = (event: FocusEvent): void => {
     if (this.hierarchyMode !== 'hover-expand' || !this.keyboardExpanded) return;
     const nextTarget = event.relatedTarget;
-    if (nextTarget && this.element.contains(nextTarget as Node)) return;
+    if (nextTarget && this.element.contains?.(nextTarget as Node)) return;
     this.keyboardExpanded = false;
     this.syncHierarchy();
   };
@@ -162,8 +162,8 @@ export class StepperView {
       if (this.keyboardExpanded) this.element.classList.add('is-keyboard-expanded');
       else this.element.classList.remove('is-keyboard-expanded');
     } else {
-      this.element.removeAttribute('tabindex');
-      this.element.removeAttribute('aria-expanded');
+      this.element.removeAttribute?.('tabindex');
+      this.element.removeAttribute?.('aria-expanded');
       this.element.classList.remove('is-keyboard-expanded');
     }
 
