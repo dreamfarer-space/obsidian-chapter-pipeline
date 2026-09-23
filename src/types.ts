@@ -4,15 +4,29 @@ export type DockPosition = 'left' | 'right';
 export type HierarchyMode = 'all' | 'hover-expand' | 'active-branch';
 export type BookmarkKind = 'revisit' | 'important';
 
+export interface ChapterIdentity {
+  version: 2;
+  level: number;
+  line: number;
+  normalizedTitle: string;
+  occurrence: number;
+  titleCount: number;
+  parent: string | null;
+  previous: string | null;
+  next: string | null;
+}
+
 export interface ReadingResume {
   chapterId: string;
   title: string;
   updatedAt: number;
+  identity?: ChapterIdentity;
 }
 
 export interface ChapterMarker {
   revisit: boolean;
   important: boolean;
+  identity?: ChapterIdentity;
 }
 
 export interface ReadingFileState {
@@ -21,7 +35,7 @@ export interface ReadingFileState {
 }
 
 export interface ReadingState {
-  version: 1;
+  version: 2;
   files: Record<string, ReadingFileState>;
 }
 
