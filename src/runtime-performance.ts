@@ -1,4 +1,5 @@
 import { Setting } from 'obsidian';
+import { normalizeHeadingText } from './core/parser';
 
 // Small runtime patch layer for the remaining legacy coordinator. These patches
 // intentionally target the production prototype so they affect the bundled
@@ -23,6 +24,21 @@ type CalibrationState = {
   converged: boolean;
   hitCap: boolean;
   shouldContinue: boolean;
+};
+
+type ReadingHeadingEntry = {
+  element: Element;
+  tag: string;
+  line: number | null;
+  norms: string[];
+};
+
+type ReadingHeadingSnapshot = {
+  entries: ReadingHeadingEntry[];
+  byLine: Map<number, Element>;
+  byTagAndText: Map<string, Element>;
+  byText: Map<string, Element>;
+  byTag: Map<string, ReadingHeadingEntry[]>;
 };
 
 function fallbackHeadings(content: string): Array<{ heading: string; level: number; position: { start: { line: number } } }> {
@@ -53,6 +69,103 @@ function isChineseLocale(): boolean {
     : null;
   const fallback = typeof navigator !== 'undefined' ? navigator.language : 'en';
   return String(language || fallback || 'en').toLowerCase().startsWith('zh');
+}
+
+function isUsableReadingHeading(element: Element): boolean {
+  if (element.classList?.contains('inline-title')) return false;
+  if (typeof element.closest !== 'function') return true;
+  return !element.closest('.internal-embed, .markdown-embed, .markdown-embed-content, .popover, .codex-floating-tooltip, .mod-header');
+}
+
+function buildReadingHeadingSnapshot(scroller: Element): ReadingHeadingSnapshot {
+  const rendered = Array.from(scroller.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+    .filter(isUsableReadingHeading);
+  const entries: ReadingHeadingEntry[] = [];
+  const byLine = new Map<number, Element>();
+  const byTagAndText = new Map<string, Element>();
+  const byText = new Map<string, Element>();
+  const byTag = new Map<string, ReadingHeadingEntry[]>();
+
+  for (const element of rendered) {
+    const tag = String(element.tagName || '').toUpperCase();
+    const dataNorm = normalizeHeadingText(element.getAttribute('data-heading') || '');
+    const textNorm = normalizeHeadingText(element.textContent || '');
+    const norms = Array.from(new Set([dataNorm, textNorm].filter(Boolean)));
+    const rawLine = element.getAttribute('data-line')
+      ?? element.getAttribute('data-heading-line')
+      ?? element.closest?.('[data-line]')?.getAttribute('data-line')
+      ?? null;
+    const parsedLine = rawLine === null ? NaN : parseInt(rawLine, 10);
+    const line = Number.isInteger(parsedLine) ? parsedLine : null;
+    const entry = { element, tag, line, norms };
+    entries.push(entry);
+
+    if (line !== null && !byLine.has(line)) byLine.set(line, element);
+    if (!byTag.has(tag)) byTag.set(tag, []);
+    byTag.get(tag)?.push(entry);
+    for (const norm of norms) {
+      const tagKey = `${tag}\u0000${norm}`;
+      if (!byTagAndText.has(tagKey)) byTagAndText.set(tagKey, element);
+      if (!byText.has(norm)) byText.set(norm, element);
+    }
+  }
+
+  return { entries, byLine, byTagAndText, byText, byTag };
+}
+
+function resolveReadingHeading(
+  snapshot: ReadingHeadingSnapshot,
+  scroller: Element,
+  chapter: any
+): Element | null {
+  const targetTag = chapter?.level ? `H${chapter.level}`.toUpperCase() : '';
+  const cleanNorm = normalizeHeadingText(chapter?.title || '');
+  const rawNorm = normalizeHeadingText(chapter?.rawHeading || chapter?.title || '');
+  const targetNorms = Array.from(new Set([cleanNorm, rawNorm].filter(Boolean)));
+  const line = Number.isInteger(chapter?.line) ? chapter.line as number : null;
+
+  if (line !== null) {
+    const byLine = snapshot.byLine.get(line);
+    if (byLine) return byLine;
+
+    const section = scroller.querySelector(`.markdown-preview-section[data-line="${line}"]`);
+    if (section) {
+      const sectionHeading = Array.from(section.querySelectorAll('h1, h2, h3, h4, h5, h6'))
+        .find(isUsableReadingHeading);
+      return sectionHeading ?? section;
+    }
+  }
+
+  if (targetTag) {
+    for (const norm of targetNorms) {
+      const exact = snapshot.byTagAndText.get(`${targetTag}\u0000${norm}`);
+      if (exact) return exact;
+    }
+
+    if (cleanNorm) {
+      const partial = snapshot.byTag.get(targetTag)?.find((entry) => entry.norms.some((norm) => (
+        norm.includes(cleanNorm) || cleanNorm.includes(norm)
+      )));
+      if (partial) return partial.element;
+    }
+  }
+
+  for (const norm of targetNorms) {
+    const exact = snapshot.byText.get(norm);
+    if (exact) return exact;
+  }
+
+  if (cleanNorm) {
+    const partial = snapshot.entries.find((entry) => entry.norms.some((norm) => (
+      norm.includes(cleanNorm) || cleanNorm.includes(norm)
+    )));
+    if (partial) return partial.element;
+  }
+
+  if (Number.isInteger(chapter?.headingIndex)) {
+    return snapshot.entries[chapter.headingIndex]?.element ?? null;
+  }
+  return null;
 }
 
 export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstructor): void {
@@ -156,8 +269,48 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     return originalExtractChapters.call(this, content, file, parserSettings);
   };
 
+  // Issue #11: only the actual Markdown view scroller is a production scroll
+  // source. Inactive Markdown panes expose no scroller and do no tracking work.
+  proto.getViewScrollers = function scopedGetViewScrollers(container: HTMLElement | null, view: any = null) {
+    if (!container) return [];
+    if (
+      view
+      && this.app?.workspace?.getActiveViewOfType
+      && typeof this.isActiveMarkdownView === 'function'
+      && !this.isActiveMarkdownView(view)
+    ) {
+      return [];
+    }
+
+    const selector = this.isReadingMode?.(view, container)
+      ? '.markdown-preview-view'
+      : '.cm-scroller';
+    const scroller = container.querySelector?.(selector) as HTMLElement | null;
+    return scroller && typeof scroller.addEventListener === 'function' ? [scroller] : [];
+  };
+
+  // Cache the Reading View heading index per preview scroller. The typed
+  // ReadingViewTracker asks for individual chapters while scrolling; resolving
+  // them against this snapshot avoids a full h1..h6 query for every lookup.
+  const readingHeadingSnapshots = new WeakMap<object, ReadingHeadingSnapshot>();
+  const originalGetReadingHeading = proto.getReadingHeading;
+  proto.getReadingHeading = function cachedGetReadingHeading(view: any, chapter: any) {
+    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
+    if (!scroller) return originalGetReadingHeading?.call(this, view, chapter) ?? null;
+
+    let snapshot = readingHeadingSnapshots.get(scroller);
+    if (!snapshot || snapshot.entries.some((entry) => (entry.element as Element & { isConnected?: boolean }).isConnected === false)) {
+      snapshot = buildReadingHeadingSnapshot(scroller);
+      readingHeadingSnapshots.set(scroller, snapshot);
+    }
+    return resolveReadingHeading(snapshot, scroller, chapter);
+  };
+
   const originalAttachStepperToView = proto.attachStepperToView;
   proto.attachStepperToView = async function patchedAttachStepperToView(view: any) {
+    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view');
+    if (scroller) readingHeadingSnapshots.delete(scroller);
+
     const result = await originalAttachStepperToView.call(this, view);
     const tooltip = this.viewTooltips?.get?.(view);
     if (tooltip?.style) {
