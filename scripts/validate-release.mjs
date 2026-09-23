@@ -15,11 +15,24 @@ const requireEqual = (label, actual, expected) => {
 requireEqual('plugin id', manifest.id, 'chapter-pipeline');
 requireEqual('display name', manifest.name, 'Chapter Pipeline');
 requireEqual('manifest/package version', manifest.version, pkg.version);
-requireEqual(
-  `versions.json[${manifest.version}]`,
-  versions[manifest.version],
-  manifest.minAppVersion
-);
+
+const hasMinAppVersion =
+  typeof manifest.minAppVersion === 'string' && manifest.minAppVersion.trim().length > 0;
+const hasVersionEntry = Object.prototype.hasOwnProperty.call(versions, manifest.version);
+
+if (!hasMinAppVersion) {
+  errors.push('manifest.minAppVersion must be a non-empty string');
+}
+if (!hasVersionEntry) {
+  errors.push(`versions.json must contain an entry for ${manifest.version}`);
+}
+if (hasMinAppVersion && hasVersionEntry) {
+  requireEqual(
+    `versions.json[${manifest.version}]`,
+    versions[manifest.version],
+    manifest.minAppVersion
+  );
+}
 
 for (const path of ['main.js', 'manifest.json', 'styles.css']) {
   if (!existsSync(path)) errors.push(`required release asset is missing: ${path}`);
