@@ -6,32 +6,51 @@ const pkg = readJson('package.json');
 const versions = readJson('versions.json');
 
 const errors = [];
+const strictVersionPattern = /^\d+\.\d+\.\d+$/;
+
 const requireEqual = (label, actual, expected) => {
   if (actual !== expected) {
     errors.push(`${label}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`);
   }
 };
 
+const requireStrictVersion = (label, value) => {
+  if (typeof value !== 'string' || !strictVersionPattern.test(value)) {
+    errors.push(`${label} must use x.y.z numeric format; got ${JSON.stringify(value)}`);
+    return false;
+  }
+  return true;
+};
+
 requireEqual('plugin id', manifest.id, 'chapter-pipeline');
 requireEqual('display name', manifest.name, 'Chapter Pipeline');
-requireEqual('manifest/package version', manifest.version, pkg.version);
 
-const hasMinAppVersion =
-  typeof manifest.minAppVersion === 'string' && manifest.minAppVersion.trim().length > 0;
-const hasVersionEntry = Object.prototype.hasOwnProperty.call(versions, manifest.version);
-
-if (!hasMinAppVersion) {
-  errors.push('manifest.minAppVersion must be a non-empty string');
+const hasValidManifestVersion = requireStrictVersion('manifest.version', manifest.version);
+const hasValidPackageVersion = requireStrictVersion('package.json version', pkg.version);
+if (hasValidManifestVersion && hasValidPackageVersion) {
+  requireEqual('manifest/package version', manifest.version, pkg.version);
 }
-if (!hasVersionEntry) {
+
+const hasValidMinAppVersion = requireStrictVersion('manifest.minAppVersion', manifest.minAppVersion);
+const hasVersionEntry =
+  hasValidManifestVersion && Object.prototype.hasOwnProperty.call(versions, manifest.version);
+
+if (hasValidManifestVersion && !hasVersionEntry) {
   errors.push(`versions.json must contain an entry for ${manifest.version}`);
 }
-if (hasMinAppVersion && hasVersionEntry) {
-  requireEqual(
+if (hasVersionEntry) {
+  const mappedMinAppVersion = versions[manifest.version];
+  const hasValidMappedMinAppVersion = requireStrictVersion(
     `versions.json[${manifest.version}]`,
-    versions[manifest.version],
-    manifest.minAppVersion
+    mappedMinAppVersion
   );
+  if (hasValidMinAppVersion && hasValidMappedMinAppVersion) {
+    requireEqual(
+      `versions.json[${manifest.version}]`,
+      mappedMinAppVersion,
+      manifest.minAppVersion
+    );
+  }
 }
 
 for (const path of ['main.js', 'manifest.json', 'styles.css']) {
