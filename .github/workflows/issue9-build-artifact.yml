@@ -1,0 +1,33 @@
+name: Issue 9 build artifact
+
+on:
+  push:
+    branches:
+      - fix/issue-9-codemirror-virtualization
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx --no-install tsc --noEmit
+      - run: npm test
+      - run: npm run build
+      - name: Commit production bundle
+        run: |
+          if git diff --quiet -- main.js; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add main.js
+          git commit -m "build: refresh production bundle"
+          git push origin HEAD:${GITHUB_REF_NAME}
