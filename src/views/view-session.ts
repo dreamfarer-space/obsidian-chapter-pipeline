@@ -109,6 +109,7 @@ export class ViewSession {
       container: options.container,
       chapters: this.chapters,
       onSelect: options.onSelectChapter,
+      hierarchyMode: options.hierarchyMode ?? 'all',
       existingElement: options.stepperElement,
       existingDashes: options.dashElements,
     });
