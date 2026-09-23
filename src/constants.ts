@@ -18,7 +18,7 @@ export const DEFAULT_SETTINGS: PluginSettings = {
   tooltipGlassmorphism: false,
   showChapterOrder: false,
   readingBookmarksEnabled: false,
-  readingState: { version: 1, files: {} }
+  readingState: { version: 2, files: {} }
 };
 
 /** Stable DOM hooks shared by views and UI modules. */

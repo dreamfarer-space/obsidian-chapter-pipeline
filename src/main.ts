@@ -1,6 +1,13 @@
 import { ChapterParser } from './core/parser';
 import { SoundEngine } from './core/sound';
 import { ReadingStorage } from './core/storage';
+import {
+  createChapterIdentity,
+  createChapterMarkerKey,
+  normalizeChapterIdentity,
+  resolveChapterIdentity
+} from './core/reading-identity';
+import { installReadingIdentityPersistence } from './reading-persistence';
 import { LivePreviewTracker } from './views/live-preview-tracker';
 import { ReadingViewTracker } from './views/reading-view-tracker';
 import { buildViewRenderSignature, canReuseRenderedSession } from './views/render-signature';
@@ -26,6 +33,7 @@ interface ProductionPlugin {
   viewSessions?: Map<object, ViewSession>;
   viewSessionVersions?: Map<object, number>;
   viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
+  fileChapterSnapshots?: Map<string, ChapterNode[]>;
   viewTooltips?: Map<object, HTMLElement>;
   app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
@@ -48,6 +56,7 @@ const LegacyPlugin = require('./legacy-main.js') as {
 };
 
 applyRuntimePerformancePatches(LegacyPlugin as never);
+installReadingIdentityPersistence(LegacyPlugin as never);
 
 /** Remove the compatibility renderer's scroll listener before typed tracking takes ownership. */
 function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {
@@ -90,8 +99,6 @@ function installTypedProductionSessions(): void {
     const stepperElement = container.querySelector('.codex-stepper-container') as HTMLElement | null;
     if (!stepperElement) return;
 
-    // Reuse the exact per-view chapter snapshot that produced the adopted dash DOM.
-    // Resume lookups may parse a wider heading range and must not replace it.
     const chapters = this.viewChapterSnapshots?.get(view) ?? [];
     if (!chapters.length) return;
 
@@ -103,10 +110,6 @@ function installTypedProductionSessions(): void {
       : this.getViewScroller?.(container, view) ?? (container.querySelector('.cm-scroller') as HTMLElement | null);
 
     if (!scroller) return;
-
-    // The compatibility renderer binds its historical scroll handler while it
-    // builds the DOM. Remove it before installing the typed tracker so users do
-    // not run two tracking implementations in parallel.
     removeLegacyScrollBinding(this, container);
 
     const hierarchyMode = (this.settings?.hierarchyMode ?? 'all') as 'all' | 'hover-expand' | 'active-branch';
@@ -123,11 +126,7 @@ function installTypedProductionSessions(): void {
       tooltipElement,
       renderSignature,
       hierarchyMode,
-      // The session stays attached to its exact Markdown scroller so split-pane
-      // UI remains stable, but inactive panes do no geometry/chapter work.
       shouldTrack: () => this.isActiveMarkdownView?.(view) !== false,
-      // Legacy has already established the initial dash/rail state. The typed
-      // tracker becomes authoritative from the first real scroll/mutation.
       trackImmediately: false,
       findReadingHeading: isReading && this.getReadingHeading
         ? (chapter) => this.getReadingHeading?.(view, chapter) ?? null
@@ -186,9 +185,6 @@ function installTypedProductionSessions(): void {
         this.viewSessionVersions?.delete(sessionView);
       });
 
-      // Workspace refresh events are noisy. If the structural signature and both
-      // adopted DOM owners are unchanged, keep the session, tooltip, observer,
-      // and scroll listener alive instead of routing through legacy teardown.
       leaves.forEach((leaf) => {
         const view = leaf?.view;
         if (!view || typeof view !== 'object') return;
@@ -218,6 +214,7 @@ function installTypedProductionSessions(): void {
     this.viewSessions?.forEach((session) => session.dispose());
     this.viewSessions?.clear();
     this.viewSessionVersions?.clear();
+    this.fileChapterSnapshots?.clear();
     legacyUnload?.call(this);
   };
 }
@@ -228,8 +225,6 @@ LegacyPlugin.ChapterParser = ChapterParser;
 LegacyPlugin.SoundEngine = SoundEngine;
 LegacyPlugin.updateHierarchyFolding = updateHierarchyFolding;
 
-// Expose the typed building blocks for incremental adoption by the coordinator
-// and by downstream integrations. The legacy static names above remain stable.
 const PublicPlugin = LegacyPlugin as typeof LegacyPlugin & Record<string, unknown>;
 PublicPlugin.ReadingStorage = ReadingStorage;
 PublicPlugin.ReadingViewTracker = ReadingViewTracker;
@@ -239,7 +234,9 @@ PublicPlugin.StepperView = StepperView;
 PublicPlugin.TooltipManager = TooltipManager;
 PublicPlugin.TypedChapterSuggestModal = TypedChapterSuggestModal;
 PublicPlugin.TypedChapterPipelineSettingTab = TypedChapterPipelineSettingTab;
+PublicPlugin.createChapterIdentity = createChapterIdentity;
+PublicPlugin.createChapterMarkerKey = createChapterMarkerKey;
+PublicPlugin.resolveChapterIdentity = resolveChapterIdentity;
+PublicPlugin.normalizeChapterIdentity = normalizeChapterIdentity;
 
-// Obsidian loads plugins through module.exports. `export =` preserves the same
-// shape for Node-based tests and for the production bundle.
 export = LegacyPlugin;

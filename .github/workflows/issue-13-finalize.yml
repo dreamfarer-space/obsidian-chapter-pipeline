@@ -1,0 +1,46 @@
+name: Finalize issue 13 branch
+
+on:
+  push:
+    branches:
+      - fix/issue-13-reading-bookmark-identity
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: fix/issue-13-reading-bookmark-identity
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npx --no-install tsc --noEmit
+      - name: Rebuild production bundle
+        run: npm run build
+      - name: Run full test suite
+        run: npm test
+      - name: Verify production branding
+        run: |
+          if grep -Fq "Charter Pipeline Pro" main.js; then
+            echo "Production bundle still contains legacy Pro branding" >&2
+            exit 1
+          fi
+      - name: Commit generated bundle and remove helper workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm .github/workflows/issue-13-finalize.yml
+          git add main.js .github/workflows/issue-13-finalize.yml
+          git commit -m "fix: address issue 13 review feedback"
+          git push origin HEAD:fix/issue-13-reading-bookmark-identity
