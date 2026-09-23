@@ -7,12 +7,13 @@ import type {
   ReadingResume,
   ReadingState
 } from '../types';
+import { normalizeChapterIdentity } from './reading-identity';
 
 export function createEmptyReadingState(): ReadingState {
-  return { version: 1, files: {} };
+  return { version: 2, files: {} };
 }
 
-/** Drop malformed/empty records when loading older plugin data. */
+/** Drop malformed/empty records while preserving readable v1 data. */
 export function normalizeReadingState(input: unknown): ReadingState {
   const normalized = createEmptyReadingState();
   if (!input || typeof input !== 'object' || Array.isArray(input)) return normalized;
@@ -32,6 +33,8 @@ export function normalizeReadingState(input: unknown): ReadingState {
           title: typeof candidate.title === 'string' ? candidate.title : '',
           updatedAt: Number.isFinite(candidate.updatedAt) ? Number(candidate.updatedAt) : 0
         };
+        const identity = normalizeChapterIdentity(candidate.identity);
+        if (identity) fileState.resume.identity = identity;
       }
     }
     const markers = source.markers;
@@ -43,6 +46,8 @@ export function normalizeReadingState(input: unknown): ReadingState {
           revisit: candidate.revisit === true,
           important: candidate.important === true
         };
+        const identity = normalizeChapterIdentity(candidate.identity);
+        if (identity) marker.identity = identity;
         if (marker.revisit || marker.important) fileState.markers[chapterId] = marker;
       }
     }
@@ -97,17 +102,26 @@ export class ReadingStorage {
 
   setResume(fileOrPath: FileLike | string, resume: ReadingResume): boolean {
     const fileState = this.getFileState(fileOrPath, true);
-    if (!fileState || fileState.resume?.chapterId === resume.chapterId) return false;
+    if (!fileState) return false;
+    const unchanged = fileState.resume?.chapterId === resume.chapterId &&
+      JSON.stringify(fileState.resume?.identity ?? null) === JSON.stringify(resume.identity ?? null);
+    if (unchanged) return false;
     fileState.resume = { ...resume };
     this.scheduleSave();
     return true;
   }
 
-  toggleMarker(fileOrPath: FileLike | string, chapterId: string, kind: BookmarkKind): boolean {
+  toggleMarker(
+    fileOrPath: FileLike | string,
+    chapterId: string,
+    kind: BookmarkKind,
+    identity?: ChapterMarker['identity']
+  ): boolean {
     const fileState = this.getFileState(fileOrPath, true);
     if (!fileState) return false;
     const marker = fileState.markers[chapterId] || { revisit: false, important: false };
     marker[kind] = !marker[kind];
+    if (identity) marker.identity = identity;
     if (marker.revisit || marker.important) fileState.markers[chapterId] = marker;
     else delete fileState.markers[chapterId];
     this.pruneEmpty(fileOrPath);
