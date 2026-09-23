@@ -3,24 +3,36 @@ import type { ChapterNode } from '../types';
 export interface LivePreviewTrackerOptions {
   container: HTMLElement;
   onActiveChapter: (index: number) => void;
+  /** Prefer a CodeMirror-derived document line when the owning view exposes one. */
+  getViewportLine?: () => number | null;
   /** Set false when an existing renderer already established the initial UI state. */
   trackImmediately?: boolean;
 }
 
-interface RenderedChapterCandidate {
+interface RenderedLineAnchor {
   element: Element;
+  line: number;
+}
+
+interface ChapterLineEntry {
+  line: number;
   chapterIndex: number;
 }
 
 const CANDIDATE_SELECTOR = '.cm-line, .cm-heading';
 const CANDIDATE_CLASS_PATTERN = /(^|\s)(cm-line|cm-heading)(\s|$)/;
 
-/** CodeMirror 6 tracker. It only reads geometry inside a scheduled frame. */
+/**
+ * CodeMirror 6 tracker. The editor viewport line is authoritative when it can
+ * be read; rendered rows are only viewport-local fallback anchors. Active
+ * chapter state is always resolved against the full parsed chapter list.
+ * Geometry is read only inside a scheduled animation frame.
+ */
 export class LivePreviewTracker {
   private readonly options: LivePreviewTrackerOptions;
   private chapters: ChapterNode[] = [];
-  private lineToChapterIndex = new Map<number, number>();
-  private renderedCandidates: RenderedChapterCandidate[] = [];
+  private chapterLineOrder: ChapterLineEntry[] = [];
+  private renderedLines: RenderedLineAnchor[] = [];
   private candidatesDirty = true;
   private frame: number | null = null;
   private disposed = false;
@@ -60,10 +72,14 @@ export class LivePreviewTracker {
     });
   }
 
+  /** Replace the authoritative chapter sequence and reset viewport-derived state. */
   setChapters(chapters: ChapterNode[]): void {
     this.chapters = chapters;
-    this.lineToChapterIndex = new Map(chapters.map((chapter, index) => [chapter.line, index]));
-    this.renderedCandidates = [];
+    this.chapterLineOrder = chapters
+      .map((chapter, chapterIndex) => ({ line: chapter.line, chapterIndex }))
+      .filter((entry) => Number.isInteger(entry.line))
+      .sort((left, right) => left.line - right.line || left.chapterIndex - right.chapterIndex);
+    this.renderedLines = [];
     this.candidatesDirty = true;
     this.lastActiveIndex = -1;
     if (this.options.trackImmediately !== false) this.schedule();
@@ -125,34 +141,36 @@ export class LivePreviewTracker {
     return this.isInsideCandidate(record.target) ? 'layout' : 'none';
   }
 
+  /** Refresh the cached viewport-local line anchors after relevant DOM mutations. */
   private refreshCandidates(): void {
     if (!this.candidatesDirty) return;
 
-    const next: RenderedChapterCandidate[] = [];
+    const next: RenderedLineAnchor[] = [];
     const seen = new Set<number>();
     const rendered = this.options.container.querySelectorAll(CANDIDATE_SELECTOR);
     for (const element of rendered) {
       const line = Number(element.getAttribute('data-line'));
-      if (!Number.isInteger(line)) continue;
-      const chapterIndex = this.lineToChapterIndex.get(line);
-      if (chapterIndex === undefined || seen.has(chapterIndex)) continue;
-      seen.add(chapterIndex);
-      next.push({ element, chapterIndex });
+      if (!Number.isInteger(line) || seen.has(line)) continue;
+      seen.add(line);
+      next.push({ element, line });
     }
 
-    this.renderedCandidates = next;
+    next.sort((left, right) => left.line - right.line);
+    this.renderedLines = next;
     this.candidatesDirty = false;
   }
 
-  private findActiveCandidate(baseline: number): number {
+  /** Infer the document line intersecting the active baseline from rendered anchors. */
+  private findDocumentLineAtBaseline(baseline: number): number | null {
+    if (this.renderedLines.length === 0) return null;
+
     let low = 0;
-    let high = this.renderedCandidates.length - 1;
+    let high = this.renderedLines.length - 1;
     let active = -1;
 
     while (low <= high) {
       const mid = (low + high) >>> 1;
-      const candidate = this.renderedCandidates[mid];
-      const top = candidate.element.getBoundingClientRect().top;
+      const top = this.renderedLines[mid].element.getBoundingClientRect().top;
       if (top <= baseline) {
         active = mid;
         low = mid + 1;
@@ -161,30 +179,65 @@ export class LivePreviewTracker {
       }
     }
 
-    return active;
+    // When the baseline is above the first rendered row, that row still gives
+    // us the viewport's document position. Mapping that line into chapters is
+    // more accurate than jumping to the first visible heading.
+    return this.renderedLines[Math.max(0, active)].line;
   }
 
-  private update(): void {
+  /** Resolve a document line to the latest chapter starting at or before it. */
+  private findChapterAtLine(line: number): number {
+    let low = 0;
+    let high = this.chapterLineOrder.length - 1;
+    let active = -1;
+
+    while (low <= high) {
+      const mid = (low + high) >>> 1;
+      if (this.chapterLineOrder[mid].line <= line) {
+        active = mid;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return active < 0 ? -1 : this.chapterLineOrder[active].chapterIndex;
+  }
+
+  /** Prefer the editor viewport line, falling back to rendered DOM anchors. */
+  private getDocumentLine(baseline: number): number | null {
+    const viewportLine = this.options.getViewportLine?.();
+    if (typeof viewportLine === 'number' && Number.isInteger(viewportLine) && viewportLine >= 0) {
+      return viewportLine;
+    }
+
     this.refreshCandidates();
-    if (this.renderedCandidates.length === 0) return;
+    return this.findDocumentLineAtBaseline(baseline);
+  }
+
+  /** Recompute active chapter state for the current animation frame. */
+  private update(): void {
+    if (this.chapterLineOrder.length === 0) return;
 
     const baseline = this.options.container.getBoundingClientRect().top + 70;
-    const candidateIndex = this.findActiveCandidate(baseline);
-    if (candidateIndex < 0) return;
+    const documentLine = this.getDocumentLine(baseline);
+    if (documentLine === null) return;
 
-    const activeIndex = this.renderedCandidates[candidateIndex].chapterIndex;
-    if (activeIndex === this.lastActiveIndex) return;
+    const activeIndex = this.findChapterAtLine(documentLine);
+    if (activeIndex < 0 || activeIndex === this.lastActiveIndex) return;
     this.lastActiveIndex = activeIndex;
     this.options.onActiveChapter(activeIndex);
   }
 
+  /** Stop tracking and release observer, frame, and cached anchor state. */
   dispose(): void {
     this.disposed = true;
     this.options.container.removeEventListener('scroll', this.schedule);
     this.observer?.disconnect();
     if (this.frame !== null) cancelAnimationFrame(this.frame);
     this.frame = null;
-    this.renderedCandidates = [];
+    this.renderedLines = [];
+    this.chapterLineOrder = [];
   }
 }
 

@@ -7,6 +7,65 @@ import { ReadingViewTracker } from './reading-view-tracker';
 export type ViewSessionMode = 'reading' | 'live-preview';
 export type ViewSessionTracker = ReadingViewTracker | LivePreviewTracker;
 
+interface CodeMirrorViewLike {
+  lineBlockAtHeight?: (height: number) => { from?: number } | null;
+  documentTop?: number;
+  scaleY?: number;
+  state?: {
+    doc?: {
+      lineAt?: (position: number) => { number?: number } | null;
+    };
+  };
+}
+
+/**
+ * Resolve the document line that intersects the tracker's 70px screen-space
+ * baseline using CodeMirror's document-relative vertical coordinate system.
+ * This stays correct when the editor has top padding or a CSS vertical scale.
+ */
+export function getLivePreviewViewportLine(view: unknown, container: HTMLElement): number | null {
+  const host = view as {
+    editor?: unknown;
+    editMode?: { editor?: unknown; cm?: unknown };
+  };
+  const editor = host.editor as { cm?: unknown } | undefined;
+  const editModeEditor = host.editMode?.editor as { cm?: unknown } | undefined;
+  const candidates = [
+    editor?.cm,
+    editModeEditor?.cm,
+    host.editMode?.cm,
+    host.editor,
+  ].filter(Boolean);
+
+  for (const candidate of candidates) {
+    const cm = candidate as CodeMirrorViewLike;
+    if (
+      typeof cm.lineBlockAtHeight !== 'function'
+      || typeof cm.state?.doc?.lineAt !== 'function'
+      || typeof cm.documentTop !== 'number'
+      || !Number.isFinite(cm.documentTop)
+    ) {
+      continue;
+    }
+
+    const screenBaseline = container.getBoundingClientRect().top + 70;
+    const scaleY = typeof cm.scaleY === 'number' && Number.isFinite(cm.scaleY) && cm.scaleY > 0
+      ? cm.scaleY
+      : 1;
+    const documentHeight = Math.max(0, (screenBaseline - cm.documentTop) / scaleY);
+    const lineBlock = cm.lineBlockAtHeight(documentHeight);
+    if (!lineBlock || typeof lineBlock.from !== 'number') continue;
+
+    const line = cm.state.doc.lineAt(lineBlock.from);
+    const lineNumber = line?.number;
+    if (typeof lineNumber === 'number' && Number.isInteger(lineNumber) && lineNumber > 0) {
+      return lineNumber - 1;
+    }
+  }
+
+  return null;
+}
+
 export interface ViewSessionOptions {
   view: unknown;
   mode: ViewSessionMode;
@@ -81,6 +140,7 @@ export class ViewSession {
       this.tracker = new LivePreviewTracker({
         container: options.container,
         onActiveChapter: handleActiveChapter,
+        getViewportLine: () => getLivePreviewViewportLine(options.view, options.container),
         trackImmediately: options.trackImmediately,
       });
     }
@@ -88,14 +148,17 @@ export class ViewSession {
     this.tracker.setChapters(this.chapters);
   }
 
+  /** Return the immutable chapter snapshot owned by this view session. */
   getChapters(): readonly ChapterNode[] {
     return this.chapters;
   }
 
+  /** Return the currently active chapter index, or -1 before the first update. */
   getActiveIndex(): number {
     return this.activeIndex;
   }
 
+  /** Release the tracker, UI adapters, and chapter snapshot for this view. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
