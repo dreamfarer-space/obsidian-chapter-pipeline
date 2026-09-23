@@ -920,7 +920,7 @@ test('Settings load handles default fallbacks and preserves existing custom over
   assert.equal(plugin.settings.tooltipGlassmorphism, false);
   assert.equal(plugin.settings.showChapterOrder, false);
   assert.equal(plugin.settings.readingBookmarksEnabled, false);
-  assert.deepEqual(plugin.settings.readingState, { version: 1, files: {} });
+  assert.deepEqual(plugin.settings.readingState, { version: 2, files: {} });
 
   // Custom overrides
   plugin.loadData = async () => ({

@@ -1,3 +1,5 @@
+import { MarkdownView } from 'obsidian';
+import { DEFAULT_SETTINGS } from './constants';
 import { ChapterParser } from './core/parser';
 import { SoundEngine } from './core/sound';
 import { ReadingStorage, normalizeReadingState } from './core/storage';
@@ -48,6 +50,18 @@ interface ProductionPlugin {
 }
 
 type ReadingAwarePlugin = ProductionPlugin & Record<string, any>;
+
+function readingNoticeText(key: 'resumeUnavailable' | 'resumeNotFound' | 'resumeAvailable', title = ''): string {
+  const language = (
+    (typeof window !== 'undefined' && window.localStorage?.getItem('language')) ||
+    (typeof navigator !== 'undefined' ? navigator.language : 'en') ||
+    'en'
+  ).toLowerCase();
+  const zh = language.startsWith('zh');
+  if (key === 'resumeUnavailable') return zh ? '这篇笔记没有保存的阅读位置。' : 'No saved reading position in this note.';
+  if (key === 'resumeNotFound') return zh ? '保存的章节已不存在，无法恢复。' : 'The saved chapter is no longer available.';
+  return zh ? `可恢复上次阅读：${title}` : `Resume available: ${title}`;
+}
 
 // The legacy coordinator remains the compatibility boundary for product/UI
 // behavior while typed view sessions take over the real production scroll path.
@@ -124,27 +138,27 @@ function installReadingIdentityPersistence(): void {
   prototype.__readingIdentityV2Installed = true;
 
   prototype.loadSettings = async function (this: ReadingAwarePlugin): Promise<void> {
-    const defaults = this.settings && typeof this.settings === 'object' ? this.settings : {};
     const loaded = await this.loadData?.();
     const loadedSettings = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
-    this.settings = Object.assign({}, defaults, loadedSettings);
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
+    const settings = this.settings as Record<string, any>;
 
-    if (this.settings.showExcerpt === undefined) this.settings.showExcerpt = true;
-    if (typeof this.settings.excerptLength !== 'number' || this.settings.excerptLength < 60 || this.settings.excerptLength > 300) {
-      this.settings.excerptLength = 140;
+    if (settings.showExcerpt === undefined) settings.showExcerpt = true;
+    if (typeof settings.excerptLength !== 'number' || settings.excerptLength < 60 || settings.excerptLength > 300) {
+      settings.excerptLength = 140;
     }
-    if (this.settings.activeColor === '#10b981') this.settings.activeColor = '#3b82f6';
-    if (!this.settings.customActiveColor) this.settings.customActiveColor = '#3b82f6';
-    if (this.settings.enableSound === undefined) this.settings.enableSound = true;
-    if (this.settings.soundVolume === undefined) this.settings.soundVolume = 50;
-    if (!this.settings.dockPosition) this.settings.dockPosition = 'left';
-    if (!this.settings.hierarchyMode) this.settings.hierarchyMode = 'hover-expand';
-    if (this.settings.showProgressRail === undefined) this.settings.showProgressRail = false;
-    if (this.settings.tooltipGlassmorphism === undefined) this.settings.tooltipGlassmorphism = true;
-    if (this.settings.showChapterOrder === undefined) this.settings.showChapterOrder = false;
-    if (this.settings.readingBookmarksEnabled === undefined) this.settings.readingBookmarksEnabled = false;
+    if (settings.activeColor === '#10b981') settings.activeColor = '#3b82f6';
+    if (!settings.customActiveColor) settings.customActiveColor = '#3b82f6';
+    if (settings.enableSound === undefined) settings.enableSound = false;
+    if (settings.soundVolume === undefined) settings.soundVolume = 50;
+    if (!settings.dockPosition) settings.dockPosition = 'left';
+    if (!settings.hierarchyMode) settings.hierarchyMode = 'hover-expand';
+    if (settings.showProgressRail === undefined) settings.showProgressRail = false;
+    if (settings.tooltipGlassmorphism === undefined) settings.tooltipGlassmorphism = false;
+    if (settings.showChapterOrder === undefined) settings.showChapterOrder = false;
+    if (settings.readingBookmarksEnabled === undefined) settings.readingBookmarksEnabled = false;
 
-    this.settings.readingState = normalizeReadingState(this.settings.readingState);
+    settings.readingState = normalizeReadingState(settings.readingState);
     await this.saveSettings?.();
   };
 
@@ -237,14 +251,14 @@ function installReadingIdentityPersistence(): void {
     if (!this.isReadingBookmarksEnabled?.()) return false;
     const targetView = view && (view as { file?: FileLike }).file
       ? view
-      : this.app?.workspace?.getActiveViewOfType?.(null);
+      : this.app?.workspace?.getActiveViewOfType?.(MarkdownView);
     const file = (targetView as { file?: FileLike } | null)?.file;
     if (!targetView || !file) return false;
 
     const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
     const savedResume = fileState?.resume;
     if (!savedResume?.chapterId) {
-      this.showNotice?.(this.translateReadingString?.('resumeUnavailable') ?? 'No saved reading position in this note.');
+      this.showNotice?.(readingNoticeText('resumeUnavailable'));
       return false;
     }
 
@@ -262,7 +276,7 @@ function installReadingIdentityPersistence(): void {
         this.pruneReadingFileState?.(file);
         await this.saveSettings?.();
       }
-      this.showNotice?.(this.translateReadingString?.('resumeNotFound') ?? 'The saved chapter is no longer available.');
+      this.showNotice?.(readingNoticeText('resumeNotFound'));
       return false;
     }
 
@@ -350,7 +364,10 @@ function installReadingIdentityPersistence(): void {
         const current = merged.markers[key] || { revisit: false, important: false };
         current.revisit = current.revisit || marker.revisit === true;
         current.important = current.important || marker.important === true;
-        if (!current.identity) current.identity = normalizeChapterIdentity(marker.identity);
+        if (!current.identity) {
+          const identity = normalizeChapterIdentity(marker.identity);
+          if (identity) current.identity = identity;
+        }
         merged.markers[key] = current;
       }
     }
@@ -373,14 +390,15 @@ function installReadingIdentityPersistence(): void {
     if (!this.isReadingBookmarksEnabled?.() || !this.isActiveMarkdownView?.(view) || !file?.path || this.resumePromptedPaths?.has(file.path)) {
       return;
     }
+    const chapters = this.extractAllChapters?.(content, file) as ChapterNode[];
+    this.fileChapterSnapshots ??= new Map<string, ChapterNode[]>();
+    this.fileChapterSnapshots.set(file.path, chapters);
+
     const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
     const savedResume = fileState?.resume;
     if (!savedResume?.chapterId) return;
 
     this.resumePromptedPaths?.add(file.path);
-    const chapters = this.extractAllChapters?.(content, file) as ChapterNode[];
-    this.fileChapterSnapshots ??= new Map<string, ChapterNode[]>();
-    this.fileChapterSnapshots.set(file.path, chapters);
     const identity = normalizeChapterIdentity(savedResume.identity);
     const chapter = identity
       ? resolveChapterIdentity(identity, chapters)
@@ -393,7 +411,7 @@ function installReadingIdentityPersistence(): void {
         this.scheduleReadingStateSave?.();
       }
       const title = chapter.title || savedResume.title;
-      const message = this.translateReadingString?.('resumeAvailable', { title }) ?? `Resume available: ${title}`;
+      const message = readingNoticeText('resumeAvailable', title);
       this.showNotice?.(message);
     }
   };
