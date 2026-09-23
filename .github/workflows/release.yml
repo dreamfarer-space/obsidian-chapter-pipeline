@@ -75,6 +75,18 @@ jobs:
         if: steps.existing.outputs.exists != 'true'
         run: npm run build
 
+      - name: Validate release metadata and assets
+        if: steps.existing.outputs.exists != 'true'
+        run: node scripts/validate-release.mjs
+
+      - name: Reject production Pro/debug branding
+        if: steps.existing.outputs.exists != 'true'
+        run: |
+          if grep -Eq "(Charter|Chapter) Pipeline Pro" main.js; then
+            echo "Production bundle still contains legacy Pro branding" >&2
+            exit 1
+          fi
+
       - name: Verify generated bundle is committed
         if: steps.existing.outputs.exists != 'true'
         run: git diff --exit-code -- main.js
