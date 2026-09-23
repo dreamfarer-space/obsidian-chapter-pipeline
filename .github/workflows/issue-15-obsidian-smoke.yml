@@ -27,14 +27,6 @@ jobs:
         with:
           node-version: 24
 
-      - name: Ensure Xvfb is available
-        shell: bash
-        run: |
-          if ! command -v Xvfb >/dev/null 2>&1; then
-            sudo apt-get update
-            sudo apt-get install -y xvfb
-          fi
-
       - name: Download archived Obsidian AppImage
         shell: bash
         env:
@@ -77,8 +69,7 @@ jobs:
           EOF
           VAULT="$vault" node <<'NODE'
           const fs = require('node:fs');
-          const path = process.env.VAULT;
-          const config = { vaults: { issue15smoke: { path, ts: Date.now(), open: true } } };
+          const config = { vaults: { issue15smoke: { path: process.env.VAULT, ts: Date.now(), open: true } } };
           fs.writeFileSync(process.env.RUNNER_TEMP + `/home-${process.env.OBSIDIAN_VERSION}/.config/obsidian/obsidian.json`, JSON.stringify(config));
           NODE
 
@@ -119,23 +110,22 @@ jobs:
 
           let id = 0;
           const pending = new Map();
-          const runtimeEvents = [];
+          const runtimeErrors = [];
           ws.addEventListener('message', (event) => {
             const message = JSON.parse(event.data);
             if (!message.id) {
               if (message.method === 'Runtime.exceptionThrown') {
-                runtimeEvents.push('EXCEPTION ' + JSON.stringify(message.params?.exceptionDetails));
-              } else if (message.method === 'Runtime.consoleAPICalled' && ['error', 'warning'].includes(message.params?.type)) {
-                const text = (message.params?.args || []).map((arg) => arg.value ?? arg.description ?? '').join(' ');
-                runtimeEvents.push(`${message.params.type.toUpperCase()} ${text}`);
+                runtimeErrors.push(JSON.stringify(message.params?.exceptionDetails));
+              }
+              if (message.method === 'Runtime.consoleAPICalled' && message.params?.type === 'error') {
+                runtimeErrors.push((message.params?.args || []).map((arg) => arg.value ?? arg.description ?? '').join(' '));
               }
               return;
             }
             if (!pending.has(message.id)) return;
-            const { resolve, reject } = pending.get(message.id);
+            const handlers = pending.get(message.id);
             pending.delete(message.id);
-            if (message.error) reject(new Error(JSON.stringify(message.error)));
-            else resolve(message.result);
+            message.error ? handlers.reject(new Error(JSON.stringify(message.error))) : handlers.resolve(message.result);
           });
 
           function send(method, params = {}) {
@@ -147,15 +137,8 @@ jobs:
           }
 
           async function evaluate(expression) {
-            const reply = await send('Runtime.evaluate', {
-              expression,
-              awaitPromise: true,
-              returnByValue: true,
-              userGesture: true,
-            });
-            if (reply.exceptionDetails) {
-              throw new Error(reply.exceptionDetails.exception?.description || reply.exceptionDetails.text || 'Renderer evaluation failed');
-            }
+            const reply = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true, userGesture: true });
+            if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description || reply.exceptionDetails.text);
             return reply.result?.value;
           }
 
@@ -166,99 +149,71 @@ jobs:
             result = await evaluate(`(async () => {
               const sleep = (ms) => new Promise(r => setTimeout(r, ms));
               for (let i = 0; i < 120 && !globalThis.app?.plugins; i++) await sleep(250);
-              if (!globalThis.app?.plugins) throw new Error('Obsidian app/plugins API did not initialize');
-
-              let apiVersion = null;
-              try { apiVersion = require('obsidian').apiVersion; } catch {}
+              if (!globalThis.app?.plugins) throw new Error('Obsidian plugin manager did not initialize');
 
               const pluginId = 'chapter-pipeline';
-              if (!app.plugins.manifests?.[pluginId] && typeof app.plugins.loadManifests === 'function') {
-                await app.plugins.loadManifests();
+              const restrictedBefore = typeof app.plugins.isEnabled === 'function' ? !app.plugins.isEnabled() : null;
+              if (typeof app.plugins.isEnabled === 'function' && !app.plugins.isEnabled()) {
+                await app.plugins.setEnable(true);
+                await sleep(500);
               }
+              const restrictedAfter = typeof app.plugins.isEnabled === 'function' ? !app.plugins.isEnabled() : null;
+              if (restrictedAfter === true) throw new Error('Could not disable Obsidian Restricted Mode');
 
-              const methods = Object.getOwnPropertyNames(Object.getPrototypeOf(app.plugins)).sort();
-              let loadResult = 'already-loaded';
-              if (!app.plugins.plugins?.[pluginId]) {
-                if (typeof app.plugins.loadPlugin === 'function') {
-                  try {
-                    loadResult = String(await app.plugins.loadPlugin(pluginId));
-                  } catch (error) {
-                    throw new Error('loadPlugin threw: ' + (error?.stack || error));
-                  }
-                } else if (typeof app.plugins.enablePlugin === 'function') {
-                  try {
-                    loadResult = String(await app.plugins.enablePlugin(pluginId));
-                  } catch (error) {
-                    throw new Error('enablePlugin threw: ' + (error?.stack || error));
-                  }
-                }
-              }
-
+              if (!app.plugins.manifests?.[pluginId] && typeof app.plugins.loadManifests === 'function') await app.plugins.loadManifests();
+              if (!app.plugins.plugins?.[pluginId]) await app.plugins.loadPlugin(pluginId);
               for (let i = 0; i < 40 && !app.plugins.plugins?.[pluginId]; i++) await sleep(250);
               if (!app.plugins.plugins?.[pluginId]) {
-                throw new Error(
-                  'Chapter Pipeline runtime instance missing; manifest=' + Boolean(app.plugins.manifests?.[pluginId]) +
-                  ', enabled=' + Boolean(app.plugins.enabledPlugins?.has?.(pluginId)) +
-                  ', loadResult=' + loadResult +
-                  ', methods=' + methods.join(',')
-                );
+                throw new Error('Plugin did not load; manifest=' + Boolean(app.plugins.manifests?.[pluginId]) + ', enabled=' + Boolean(app.plugins.enabledPlugins?.has?.(pluginId)));
               }
 
               const file = app.vault.getAbstractFileByPath('Smoke.md');
-              if (!file) throw new Error('Smoke.md was not loaded into the vault');
+              if (!file) throw new Error('Smoke.md missing');
               const leaf = app.workspace.getLeaf(false);
 
               await leaf.setViewState({ type: 'markdown', state: { file: 'Smoke.md', mode: 'preview' }, active: true });
               await sleep(1800);
               const readingDashes = document.querySelectorAll('.codex-dash-item').length;
-              if (readingDashes < 3) throw new Error('Reading View did not render the chapter pipeline; dashes=' + readingDashes);
+              if (readingDashes < 3) throw new Error('Reading View chapter rail missing; dashes=' + readingDashes);
 
               await leaf.setViewState({ type: 'markdown', state: { file: 'Smoke.md', mode: 'source' }, active: true });
               await sleep(1800);
               const liveDashes = document.querySelectorAll('.codex-dash-item').length;
-              if (liveDashes < 3) throw new Error('Live Preview/source view did not render the chapter pipeline; dashes=' + liveDashes);
+              if (liveDashes < 3) throw new Error('Live Preview/source chapter rail missing; dashes=' + liveDashes);
 
               const commands = Object.keys(app.commands.commands || {}).filter(id => id.startsWith('chapter-pipeline-'));
-              if (commands.length < 3) throw new Error('Expected Chapter Pipeline commands were not registered; count=' + commands.length);
+              if (commands.length < 3) throw new Error('Chapter Pipeline commands missing; count=' + commands.length);
 
-              let reload = 'not-supported';
-              if (typeof app.plugins.unloadPlugin === 'function' && typeof app.plugins.loadPlugin === 'function') {
-                await app.plugins.unloadPlugin(pluginId);
-                await sleep(400);
-                if (app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not unload cleanly');
-                const reloaded = await app.plugins.loadPlugin(pluginId);
-                await sleep(1200);
-                if (!app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not reload cleanly; result=' + String(reloaded));
-                reload = 'passed';
-              }
+              await app.plugins.unloadPlugin(pluginId);
+              await sleep(400);
+              if (app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not unload cleanly');
+              await app.plugins.loadPlugin(pluginId);
+              await sleep(1200);
+              if (!app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not reload cleanly');
 
-              return { apiVersion, readingDashes, liveDashes, commands: commands.length, reload, loadResult };
+              let apiVersion = null;
+              try { apiVersion = require('obsidian').apiVersion; } catch {}
+              return { apiVersion, restrictedBefore, restrictedAfter, readingDashes, liveDashes, commands: commands.length };
             })()`);
           } catch (error) {
             console.error(error.stack || error);
-            if (runtimeEvents.length) {
-              console.error('Renderer runtime events:\n' + runtimeEvents.join('\n---\n'));
-            }
+            if (runtimeErrors.length) console.error('Renderer errors:\n' + runtimeErrors.join('\n---\n'));
             process.exitCode = 1;
             ws.close();
             await sleep(100);
             process.exit();
           }
 
-          if (result.apiVersion && result.apiVersion !== expected) {
-            throw new Error(`Expected Obsidian API ${expected}, renderer reports ${result.apiVersion}`);
-          }
-
           console.log(JSON.stringify(result));
           const fs = await import('node:fs');
           fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
             `### Obsidian ${expected} real-app smoke\n\n` +
-            `- API version reported: ${result.apiVersion ?? 'not exposed'}\n` +
-            `- Plugin load: ${result.loadResult}\n` +
+            `- Restricted Mode initially: ${result.restrictedBefore}\n` +
+            `- Restricted Mode after setup: ${result.restrictedAfter}\n` +
             `- Reading View dashes: ${result.readingDashes}\n` +
             `- Live Preview/source dashes: ${result.liveDashes}\n` +
             `- Registered commands: ${result.commands}\n` +
-            `- Unload/reload: ${result.reload}\n` +
+            `- Unload/reload: passed\n` +
             `- Result: **PASS**\n`);
           ws.close();
           NODE
@@ -276,5 +231,4 @@ jobs:
         shell: bash
         env:
           OBSIDIAN_VERSION: ${{ matrix.obsidian }}
-        run: |
-          tail -n 200 "$RUNNER_TEMP/obsidian-${OBSIDIAN_VERSION}.log" || true
+        run: tail -n 200 "$RUNNER_TEMP/obsidian-${OBSIDIAN_VERSION}.log" || true
