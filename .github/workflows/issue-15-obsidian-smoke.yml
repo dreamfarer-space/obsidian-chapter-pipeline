@@ -114,9 +114,7 @@ jobs:
           ws.addEventListener('message', (event) => {
             const message = JSON.parse(event.data);
             if (!message.id) {
-              if (message.method === 'Runtime.exceptionThrown') {
-                runtimeErrors.push(JSON.stringify(message.params?.exceptionDetails));
-              }
+              if (message.method === 'Runtime.exceptionThrown') runtimeErrors.push(JSON.stringify(message.params?.exceptionDetails));
               if (message.method === 'Runtime.consoleAPICalled' && message.params?.type === 'error') {
                 runtimeErrors.push((message.params?.args || []).map((arg) => arg.value ?? arg.description ?? '').join(' '));
               }
@@ -163,9 +161,7 @@ jobs:
               if (!app.plugins.manifests?.[pluginId] && typeof app.plugins.loadManifests === 'function') await app.plugins.loadManifests();
               if (!app.plugins.plugins?.[pluginId]) await app.plugins.loadPlugin(pluginId);
               for (let i = 0; i < 40 && !app.plugins.plugins?.[pluginId]; i++) await sleep(250);
-              if (!app.plugins.plugins?.[pluginId]) {
-                throw new Error('Plugin did not load; manifest=' + Boolean(app.plugins.manifests?.[pluginId]) + ', enabled=' + Boolean(app.plugins.enabledPlugins?.has?.(pluginId)));
-              }
+              if (!app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not load');
 
               const file = app.vault.getAbstractFileByPath('Smoke.md');
               if (!file) throw new Error('Smoke.md missing');
@@ -181,8 +177,10 @@ jobs:
               const liveDashes = document.querySelectorAll('.codex-dash-item').length;
               if (liveDashes < 3) throw new Error('Live Preview/source chapter rail missing; dashes=' + liveDashes);
 
-              const commands = Object.keys(app.commands.commands || {}).filter(id => id.startsWith('chapter-pipeline-'));
-              if (commands.length < 3) throw new Error('Chapter Pipeline commands missing; count=' + commands.length);
+              const commandKeys = Object.keys(app.commands.commands || {}).filter(id => id.includes(pluginId));
+              if (commandKeys.length < 3) {
+                throw new Error('Chapter Pipeline commands missing; keys=' + JSON.stringify(commandKeys));
+              }
 
               await app.plugins.unloadPlugin(pluginId);
               await sleep(400);
@@ -191,9 +189,14 @@ jobs:
               await sleep(1200);
               if (!app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not reload cleanly');
 
-              let apiVersion = null;
-              try { apiVersion = require('obsidian').apiVersion; } catch {}
-              return { apiVersion, restrictedBefore, restrictedAfter, readingDashes, liveDashes, commands: commands.length };
+              return {
+                restrictedBefore,
+                restrictedAfter,
+                readingDashes,
+                liveDashes,
+                commands: commandKeys.length,
+                commandKeys
+              };
             })()`);
           } catch (error) {
             console.error(error.stack || error);
@@ -212,7 +215,7 @@ jobs:
             `- Restricted Mode after setup: ${result.restrictedAfter}\n` +
             `- Reading View dashes: ${result.readingDashes}\n` +
             `- Live Preview/source dashes: ${result.liveDashes}\n` +
-            `- Registered commands: ${result.commands}\n` +
+            `- Registered plugin commands: ${result.commands}\n` +
             `- Unload/reload: passed\n` +
             `- Result: **PASS**\n`);
           ws.close();
