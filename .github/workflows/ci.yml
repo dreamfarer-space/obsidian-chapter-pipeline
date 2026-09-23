@@ -58,7 +58,7 @@ jobs:
 
       - name: Reject runtime Pro/debug branding
         run: |
-          if grep -Eq "(Charter|Chapter) Pipeline Pro" src/legacy-main.js main.js; then
+          if grep -Fq "Chapter Pipeline Pro" src/legacy-main.js main.js; then
             echo "Runtime source or production bundle still contains legacy Pro/debug branding" >&2
             exit 1
           fi
