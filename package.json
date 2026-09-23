@@ -6,7 +6,7 @@
   "scripts": {
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
-    "test": "node --test main.test.js tracking.test.js virtualization.test.js view-session.test.js runtime-helpers.test.js"
+    "test": "node --test main.test.js tracking.test.js virtualization.test.js view-session.test.js runtime-helpers.test.js reading-identity.test.js"
   },
   "keywords": [
     "obsidian",
