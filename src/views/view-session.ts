@@ -97,6 +97,7 @@ export class ViewSession {
   readonly tooltip: TooltipManager | null;
   readonly tracker: ViewSessionTracker;
   readonly renderSignature: string;
+  readonly trackingContainer: HTMLElement;
 
   private chapters: ChapterNode[];
   private activeIndex = -1;
@@ -106,6 +107,7 @@ export class ViewSession {
     this.view = options.view;
     this.mode = options.mode;
     this.renderSignature = options.renderSignature ?? '';
+    this.trackingContainer = options.container;
     this.chapters = options.chapters;
 
     this.stepper = new StepperView({
