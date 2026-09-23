@@ -1,0 +1,226 @@
+name: Issue 15 Real Obsidian Smoke
+
+on:
+  push:
+    branches:
+      - chore/issue-15-community-submission-final
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Obsidian ${{ matrix.obsidian }} desktop smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        obsidian: ['0.15.9', '1.13.7']
+
+    steps:
+      - name: Check out plugin
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Ensure Xvfb is available
+        shell: bash
+        run: |
+          if ! command -v Xvfb >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y xvfb
+          fi
+
+      - name: Download archived Obsidian AppImage
+        shell: bash
+        env:
+          OBSIDIAN_VERSION: ${{ matrix.obsidian }}
+        run: |
+          set -euo pipefail
+          url="https://github.com/obsidianmd/obsidian-releases/releases/download/v${OBSIDIAN_VERSION}/Obsidian-${OBSIDIAN_VERSION}.AppImage"
+          curl --fail --location --retry 3 --output "$RUNNER_TEMP/obsidian.AppImage" "$url"
+          chmod +x "$RUNNER_TEMP/obsidian.AppImage"
+          cd "$RUNNER_TEMP"
+          ./obsidian.AppImage --appimage-extract >/dev/null
+          mv squashfs-root "obsidian-${OBSIDIAN_VERSION}"
+
+      - name: Prepare isolated vault
+        shell: bash
+        env:
+          OBSIDIAN_VERSION: ${{ matrix.obsidian }}
+        run: |
+          set -euo pipefail
+          home="$RUNNER_TEMP/home-${OBSIDIAN_VERSION}"
+          vault="$RUNNER_TEMP/vault-${OBSIDIAN_VERSION}"
+          mkdir -p "$home/.config/obsidian" "$vault/.obsidian/plugins/chapter-pipeline"
+          cp main.js manifest.json styles.css "$vault/.obsidian/plugins/chapter-pipeline/"
+          printf '["chapter-pipeline"]\n' > "$vault/.obsidian/community-plugins.json"
+          cat > "$vault/Smoke.md" <<'EOF'
+          # Chapter One
+          Intro text with $E=mc^2$.
+
+          ## Section A
+          Body A.
+
+          ### Detail A.1
+          More text.
+
+          ## Section B
+          Body B.
+          EOF
+          VAULT="$vault" node <<'NODE'
+          const fs = require('node:fs');
+          const path = process.env.VAULT;
+          const config = { vaults: { issue15smoke: { path, ts: Date.now(), open: true } } };
+          fs.writeFileSync(process.env.RUNNER_TEMP + `/home-${process.env.OBSIDIAN_VERSION}/.config/obsidian/obsidian.json`, JSON.stringify(config));
+          NODE
+
+      - name: Run real-app plugin smoke test
+        shell: bash
+        env:
+          OBSIDIAN_VERSION: ${{ matrix.obsidian }}
+        run: |
+          set -euo pipefail
+          home="$RUNNER_TEMP/home-${OBSIDIAN_VERSION}"
+          app="$RUNNER_TEMP/obsidian-${OBSIDIAN_VERSION}/AppRun"
+          port=$((9222 + ${{ strategy.job-index }}))
+
+          cat > "$RUNNER_TEMP/smoke.mjs" <<'NODE'
+          const port = Number(process.env.CDP_PORT);
+          const expected = process.env.OBSIDIAN_VERSION;
+          const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+          async function getTarget() {
+            for (let i = 0; i < 80; i++) {
+              try {
+                const response = await fetch(`http://127.0.0.1:${port}/json`);
+                const targets = await response.json();
+                const target = targets.find((item) => item.type === 'page' && item.webSocketDebuggerUrl);
+                if (target) return target;
+              } catch {}
+              await sleep(250);
+            }
+            throw new Error('DevTools target did not become available');
+          }
+
+          const target = await getTarget();
+          const ws = new WebSocket(target.webSocketDebuggerUrl);
+          await new Promise((resolve, reject) => {
+            ws.addEventListener('open', resolve, { once: true });
+            ws.addEventListener('error', reject, { once: true });
+          });
+
+          let id = 0;
+          const pending = new Map();
+          ws.addEventListener('message', (event) => {
+            const message = JSON.parse(event.data);
+            if (!message.id || !pending.has(message.id)) return;
+            const { resolve, reject } = pending.get(message.id);
+            pending.delete(message.id);
+            if (message.error) reject(new Error(JSON.stringify(message.error)));
+            else resolve(message.result);
+          });
+
+          function send(method, params = {}) {
+            const messageId = ++id;
+            return new Promise((resolve, reject) => {
+              pending.set(messageId, { resolve, reject });
+              ws.send(JSON.stringify({ id: messageId, method, params }));
+            });
+          }
+
+          async function evaluate(expression) {
+            const reply = await send('Runtime.evaluate', {
+              expression,
+              awaitPromise: true,
+              returnByValue: true,
+              userGesture: true,
+            });
+            if (reply.exceptionDetails) {
+              throw new Error(reply.exceptionDetails.exception?.description || reply.exceptionDetails.text || 'Renderer evaluation failed');
+            }
+            return reply.result?.value;
+          }
+
+          await send('Runtime.enable');
+
+          const result = await evaluate(`(async () => {
+            const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+            for (let i = 0; i < 80 && !globalThis.app?.plugins; i++) await sleep(250);
+            if (!globalThis.app?.plugins) throw new Error('Obsidian app/plugins API did not initialize');
+
+            let apiVersion = null;
+            try { apiVersion = require('obsidian').apiVersion; } catch {}
+
+            const pluginId = 'chapter-pipeline';
+            for (let i = 0; i < 60 && !app.plugins.plugins?.[pluginId]; i++) await sleep(250);
+            const pluginLoadedInitially = Boolean(app.plugins.plugins?.[pluginId]);
+            if (!pluginLoadedInitially) throw new Error('Chapter Pipeline was not loaded from community-plugins.json');
+
+            const file = app.vault.getAbstractFileByPath('Smoke.md');
+            if (!file) throw new Error('Smoke.md was not loaded into the vault');
+            const leaf = app.workspace.getLeaf(false);
+
+            await leaf.setViewState({ type: 'markdown', state: { file: 'Smoke.md', mode: 'preview' }, active: true });
+            await sleep(1200);
+            const readingDashes = document.querySelectorAll('.codex-dash-item').length;
+            if (readingDashes < 3) throw new Error('Reading View did not render the chapter pipeline');
+
+            await leaf.setViewState({ type: 'markdown', state: { file: 'Smoke.md', mode: 'source' }, active: true });
+            await sleep(1200);
+            const liveDashes = document.querySelectorAll('.codex-dash-item').length;
+            if (liveDashes < 3) throw new Error('Live Preview/source view did not render the chapter pipeline');
+
+            const commands = Object.keys(app.commands.commands || {}).filter(id => id.startsWith('chapter-pipeline-'));
+            if (commands.length < 3) throw new Error('Expected Chapter Pipeline commands were not registered');
+
+            let reload = 'not-supported';
+            if (typeof app.plugins.disablePlugin === 'function' && typeof app.plugins.enablePlugin === 'function') {
+              await app.plugins.disablePlugin(pluginId);
+              await sleep(300);
+              if (app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not unload cleanly');
+              await app.plugins.enablePlugin(pluginId);
+              await sleep(1000);
+              if (!app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not reload cleanly');
+              reload = 'passed';
+            }
+
+            return { apiVersion, readingDashes, liveDashes, commands: commands.length, reload };
+          })()`);
+
+          if (result.apiVersion && result.apiVersion !== expected) {
+            throw new Error(`Expected Obsidian API ${expected}, renderer reports ${result.apiVersion}`);
+          }
+
+          console.log(JSON.stringify(result));
+          const fs = await import('node:fs');
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `### Obsidian ${expected} real-app smoke\n\n` +
+            `- API version reported: ${result.apiVersion ?? 'not exposed'}\n` +
+            `- Reading View dashes: ${result.readingDashes}\n` +
+            `- Live Preview/source dashes: ${result.liveDashes}\n` +
+            `- Registered commands: ${result.commands}\n` +
+            `- Disable/re-enable: ${result.reload}\n` +
+            `- Result: **PASS**\n`);
+          ws.close();
+          NODE
+
+          export HOME="$home"
+          export XDG_CONFIG_HOME="$home/.config"
+          export CDP_PORT="$port"
+          xvfb-run -a "$app" --no-sandbox --disable-gpu --disable-dev-shm-usage --remote-debugging-port="$port" >"$RUNNER_TEMP/obsidian-${OBSIDIAN_VERSION}.log" 2>&1 &
+          app_pid=$!
+          trap 'kill "$app_pid" 2>/dev/null || true' EXIT
+          node "$RUNNER_TEMP/smoke.mjs"
+
+      - name: Show Obsidian log on failure
+        if: failure()
+        shell: bash
+        env:
+          OBSIDIAN_VERSION: ${{ matrix.obsidian }}
+        run: |
+          tail -n 200 "$RUNNER_TEMP/obsidian-${OBSIDIAN_VERSION}.log" || true
