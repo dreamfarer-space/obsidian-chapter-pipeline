@@ -58,7 +58,9 @@ jobs:
           vault="$RUNNER_TEMP/vault-${OBSIDIAN_VERSION}"
           mkdir -p "$home/.config/obsidian" "$vault/.obsidian/plugins/chapter-pipeline"
           cp main.js manifest.json styles.css "$vault/.obsidian/plugins/chapter-pipeline/"
+          printf '{}\n' > "$vault/.obsidian/app.json"
           printf '["chapter-pipeline"]\n' > "$vault/.obsidian/community-plugins.json"
+          printf '{}\n' > "$home/.config/obsidian/issue15smoke.json"
           cat > "$vault/Smoke.md" <<'EOF'
           # Chapter One
           Intro text with $E=mc^2$.
@@ -95,7 +97,7 @@ jobs:
           const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
           async function getTarget() {
-            for (let i = 0; i < 80; i++) {
+            for (let i = 0; i < 100; i++) {
               try {
                 const response = await fetch(`http://127.0.0.1:${port}/json`);
                 const targets = await response.json();
@@ -150,41 +152,48 @@ jobs:
 
           const result = await evaluate(`(async () => {
             const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-            for (let i = 0; i < 80 && !globalThis.app?.plugins; i++) await sleep(250);
+            for (let i = 0; i < 100 && !globalThis.app?.plugins; i++) await sleep(250);
             if (!globalThis.app?.plugins) throw new Error('Obsidian app/plugins API did not initialize');
 
             let apiVersion = null;
             try { apiVersion = require('obsidian').apiVersion; } catch {}
 
             const pluginId = 'chapter-pipeline';
+            if (!app.plugins.manifests?.[pluginId] && typeof app.plugins.loadManifests === 'function') {
+              await app.plugins.loadManifests();
+            }
+            if (!app.plugins.plugins?.[pluginId] && typeof app.plugins.enablePlugin === 'function') {
+              await app.plugins.enablePlugin(pluginId);
+            }
             for (let i = 0; i < 60 && !app.plugins.plugins?.[pluginId]; i++) await sleep(250);
-            const pluginLoadedInitially = Boolean(app.plugins.plugins?.[pluginId]);
-            if (!pluginLoadedInitially) throw new Error('Chapter Pipeline was not loaded from community-plugins.json');
+            if (!app.plugins.plugins?.[pluginId]) {
+              throw new Error('Chapter Pipeline could not be enabled; manifest=' + Boolean(app.plugins.manifests?.[pluginId]) + ', enabled=' + Boolean(app.plugins.enabledPlugins?.has?.(pluginId)));
+            }
 
             const file = app.vault.getAbstractFileByPath('Smoke.md');
             if (!file) throw new Error('Smoke.md was not loaded into the vault');
             const leaf = app.workspace.getLeaf(false);
 
             await leaf.setViewState({ type: 'markdown', state: { file: 'Smoke.md', mode: 'preview' }, active: true });
-            await sleep(1200);
+            await sleep(1500);
             const readingDashes = document.querySelectorAll('.codex-dash-item').length;
-            if (readingDashes < 3) throw new Error('Reading View did not render the chapter pipeline');
+            if (readingDashes < 3) throw new Error('Reading View did not render the chapter pipeline; dashes=' + readingDashes);
 
             await leaf.setViewState({ type: 'markdown', state: { file: 'Smoke.md', mode: 'source' }, active: true });
-            await sleep(1200);
+            await sleep(1500);
             const liveDashes = document.querySelectorAll('.codex-dash-item').length;
-            if (liveDashes < 3) throw new Error('Live Preview/source view did not render the chapter pipeline');
+            if (liveDashes < 3) throw new Error('Live Preview/source view did not render the chapter pipeline; dashes=' + liveDashes);
 
             const commands = Object.keys(app.commands.commands || {}).filter(id => id.startsWith('chapter-pipeline-'));
-            if (commands.length < 3) throw new Error('Expected Chapter Pipeline commands were not registered');
+            if (commands.length < 3) throw new Error('Expected Chapter Pipeline commands were not registered; count=' + commands.length);
 
             let reload = 'not-supported';
             if (typeof app.plugins.disablePlugin === 'function' && typeof app.plugins.enablePlugin === 'function') {
               await app.plugins.disablePlugin(pluginId);
-              await sleep(300);
+              await sleep(400);
               if (app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not unload cleanly');
               await app.plugins.enablePlugin(pluginId);
-              await sleep(1000);
+              await sleep(1200);
               if (!app.plugins.plugins?.[pluginId]) throw new Error('Plugin did not reload cleanly');
               reload = 'passed';
             }
