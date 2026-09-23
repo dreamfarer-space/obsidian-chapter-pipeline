@@ -22,7 +22,9 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
   display(): void {
     const strings = I18N[getLocale()] || I18N.en;
     this.containerEl.replaceChildren();
-    this.containerEl.createEl('h2', { text: strings.tabTitle });
+    new Setting(this.containerEl)
+      .setName(strings.tabTitle)
+      .setHeading();
     this.addToggle(strings.showExcerptName || 'Show excerpt', strings.showExcerptDesc || '', 'showExcerpt', true);
     this.addToggle(strings.ignoreH1Name || 'Ignore first H1', strings.ignoreH1Desc || '', 'ignoreFirstH1', false);
     this.addToggle(strings.readingBookmarksEnabledName || 'Reading progress', strings.readingBookmarksEnabledDesc || '', 'readingBookmarksEnabled', false);

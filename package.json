@@ -1,6 +1,6 @@
 {
   "name": "obsidian-chapter-pipeline",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Minimalist Linear-style floating horizontal dash stepper with KaTeX formula preview and pinned top navigation for Obsidian.",
   "main": "main.js",
   "scripts": {
