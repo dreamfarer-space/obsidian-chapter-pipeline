@@ -1094,24 +1094,24 @@ test('onload registers navigation and reading-bookmark commands', async () => {
 
   const prevCmd = plugin.commands.find(c => c.id === 'charter-pipeline-jump-prev');
   assert.ok(prevCmd, 'jump-prev command should be registered');
-  assert.equal(prevCmd.name, 'Charter Pipeline: Jump to previous chapter');
+  assert.equal(prevCmd.name, 'Chapter Pipeline: Jump to previous chapter');
 
   const nextCmd = plugin.commands.find(c => c.id === 'charter-pipeline-jump-next');
   assert.ok(nextCmd, 'jump-next command should be registered');
-  assert.equal(nextCmd.name, 'Charter Pipeline: Jump to next chapter');
+  assert.equal(nextCmd.name, 'Chapter Pipeline: Jump to next chapter');
 
   const paletteCmd = plugin.commands.find(c => c.id === 'charter-pipeline-open-palette');
   assert.ok(paletteCmd, 'open-palette command should be registered');
-  assert.equal(paletteCmd.name, 'Charter Pipeline: Search & switch chapter (Palette)');
+  assert.equal(paletteCmd.name, 'Chapter Pipeline: Search & switch chapter (Palette)');
 
   const resumeCmd = plugin.commands.find(c => c.id === 'charter-pipeline-resume-last-chapter');
   const revisitCmd = plugin.commands.find(c => c.id === 'charter-pipeline-toggle-revisit-current');
   const importantCmd = plugin.commands.find(c => c.id === 'charter-pipeline-toggle-important-current');
   const clearCmd = plugin.commands.find(c => c.id === 'charter-pipeline-clear-reading-bookmarks-current');
-  assert.equal(resumeCmd.name, 'Charter Pipeline: Resume last chapter');
-  assert.equal(revisitCmd.name, 'Charter Pipeline: Toggle revisit bookmark for current chapter');
-  assert.equal(importantCmd.name, 'Charter Pipeline: Toggle important bookmark for current chapter');
-  assert.equal(clearCmd.name, 'Charter Pipeline: Clear reading progress & bookmarks for current note');
+  assert.equal(resumeCmd.name, 'Chapter Pipeline: Resume last chapter');
+  assert.equal(revisitCmd.name, 'Chapter Pipeline: Toggle revisit bookmark for current chapter');
+  assert.equal(importantCmd.name, 'Chapter Pipeline: Toggle important bookmark for current chapter');
+  assert.equal(clearCmd.name, 'Chapter Pipeline: Clear reading progress & bookmarks for current note');
   assert.equal(resumeCmd.checkCallback(true), false, 'reading commands remain unavailable while the optional feature is off');
   assert.equal(vaultEvents.has('rename'), true, 'the vault rename listener should migrate persisted reading state');
 
@@ -1722,11 +1722,11 @@ test('user-facing strings follow Chinese Obsidian language and fall back to Engl
 
   const prevCommand = plugin.commands.find((command) => command.id === 'charter-pipeline-jump-prev');
   const resumeCommand = plugin.commands.find((command) => command.id === 'charter-pipeline-resume-last-chapter');
-  assert.equal(prevCommand.name, 'Charter Pipeline：跳转至上一章节');
-  assert.equal(resumeCommand.name, 'Charter Pipeline：恢复上次阅读章节');
+  assert.equal(prevCommand.name, 'Chapter Pipeline：跳转至上一章节');
+  assert.equal(resumeCommand.name, 'Chapter Pipeline：恢复上次阅读章节');
 
   plugin.settingTab.display();
-  assert.equal(plugin.settingTab.containerEl.children[0].textContent, 'Charter Pipeline 设置');
+  assert.equal(plugin.settingTab.containerEl.children[0].textContent, 'Chapter Pipeline 设置');
   const readingSetting = Setting.instances.find((setting) => setting.name === '开启阅读断点与章节书签');
   assert.ok(readingSetting);
 

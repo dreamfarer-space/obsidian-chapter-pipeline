@@ -34,7 +34,7 @@ const DEFAULT_SETTINGS = {
 
 const I18N = {
   en: {
-    tabTitle: 'Charter Pipeline Settings',
+    tabTitle: 'Chapter Pipeline Settings',
     showExcerptName: 'Show 3-Line Excerpt Preview',
     showExcerptDesc: 'Display a 3-line excerpt of the section with KaTeX formula rendering below the title in the hover popover card. When disabled, only the clean title is shown.',
     excerptLengthName: 'Excerpt length (characters)',
@@ -90,7 +90,7 @@ const I18N = {
     searchPlaceholder: 'Search chapter or formula...',
     readingSectionTitle: 'Reading Progress & Bookmarks',
     readingBookmarksEnabledName: 'Enable Reading Progress & Bookmarks',
-    readingBookmarksEnabledDesc: 'Save the last chapter you read and add optional chapter bookmarks. Stored only in Charter Pipeline plugin data; your Markdown files are never changed.',
+    readingBookmarksEnabledDesc: 'Save the last chapter you read and add optional chapter bookmarks. Stored only in Chapter Pipeline plugin data; your Markdown files are never changed.',
     cleanupReadingBookmarksName: 'Clean Up Invalid Bookmark Records',
     cleanupReadingBookmarksDesc: 'Remove saved reading positions and bookmarks for deleted or moved files to keep storage clean.',
     cleanupButtonText: 'Clean up now',
@@ -103,14 +103,14 @@ const I18N = {
     markImportant: 'Mark as important',
     removeImportantMark: 'Remove important mark',
     clearChapterBookmarks: 'Clear chapter bookmarks',
-    commandJumpPrev: 'Charter Pipeline: Jump to previous chapter',
-    commandJumpNext: 'Charter Pipeline: Jump to next chapter',
-    commandOpenPalette: 'Charter Pipeline: Search & switch chapter (Palette)',
-    commandResumeLastChapter: 'Charter Pipeline: Resume last chapter',
-    commandToggleRevisit: 'Charter Pipeline: Toggle revisit bookmark for current chapter',
-    commandToggleImportant: 'Charter Pipeline: Toggle important bookmark for current chapter',
-    commandClearReadingBookmarks: 'Charter Pipeline: Clear reading progress & bookmarks for current note',
-    commandCleanupReadingBookmarks: 'Charter Pipeline: Clean up invalid reading progress & bookmarks',
+    commandJumpPrev: 'Chapter Pipeline: Jump to previous chapter',
+    commandJumpNext: 'Chapter Pipeline: Jump to next chapter',
+    commandOpenPalette: 'Chapter Pipeline: Search & switch chapter (Palette)',
+    commandResumeLastChapter: 'Chapter Pipeline: Resume last chapter',
+    commandToggleRevisit: 'Chapter Pipeline: Toggle revisit bookmark for current chapter',
+    commandToggleImportant: 'Chapter Pipeline: Toggle important bookmark for current chapter',
+    commandClearReadingBookmarks: 'Chapter Pipeline: Clear reading progress & bookmarks for current note',
+    commandCleanupReadingBookmarks: 'Chapter Pipeline: Clean up invalid reading progress & bookmarks',
     resumeAvailable: 'Resume available: {title}',
     resumeUnavailable: 'No saved reading position in this note.',
     resumeNotFound: 'The saved chapter is no longer available.',
@@ -118,7 +118,7 @@ const I18N = {
     chapterStatus: '{title} — {statuses}'
   },
   zh: {
-    tabTitle: 'Charter Pipeline 设置',
+    tabTitle: 'Chapter Pipeline 设置',
     showExcerptName: '开启正文 3 行摘要预览',
     showExcerptDesc: '在悬浮气泡中换行展示正文开头的 3 行摘要（支持 LaTeX / KaTeX 公式渲染，超出 3 行自动显示 ... 省略号）。关闭后仅展示纯净标题。',
     excerptLengthName: '摘要字符长度',
@@ -174,7 +174,7 @@ const I18N = {
     searchPlaceholder: '搜索章节或公式…',
     readingSectionTitle: '阅读断点与章节书签',
     readingBookmarksEnabledName: '开启阅读断点与章节书签',
-    readingBookmarksEnabledDesc: '保存上次阅读章节，并可为章节添加书签。数据仅保存在 Charter Pipeline 插件配置中，不会修改 Markdown 文件。',
+    readingBookmarksEnabledDesc: '保存上次阅读章节，并可为章节添加书签。数据仅保存在 Chapter Pipeline 插件配置中，不会修改 Markdown 文件。',
     cleanupReadingBookmarksName: '清理已失效的笔记记录',
     cleanupReadingBookmarksDesc: '扫描并移除已删除或移出库的笔记所遗留的阅读断点与书签数据，保持配置数据轻量。',
     cleanupButtonText: '立即清理',
@@ -187,14 +187,14 @@ const I18N = {
     markImportant: '标记为重点',
     removeImportantMark: '移除重点标记',
     clearChapterBookmarks: '清除本章节书签',
-    commandJumpPrev: 'Charter Pipeline：跳转至上一章节',
-    commandJumpNext: 'Charter Pipeline：跳转至下一章节',
-    commandOpenPalette: 'Charter Pipeline：搜索并快速跳转章节',
-    commandResumeLastChapter: 'Charter Pipeline：恢复上次阅读章节',
-    commandToggleRevisit: 'Charter Pipeline：切换当前章节的稍后回看书签',
-    commandToggleImportant: 'Charter Pipeline：切换当前章节的重点书签',
-    commandClearReadingBookmarks: 'Charter Pipeline：清除当前笔记的阅读断点与书签',
-    commandCleanupReadingBookmarks: 'Charter Pipeline：清理已失效的阅读断点与书签',
+    commandJumpPrev: 'Chapter Pipeline：跳转至上一章节',
+    commandJumpNext: 'Chapter Pipeline：跳转至下一章节',
+    commandOpenPalette: 'Chapter Pipeline：搜索并快速跳转章节',
+    commandResumeLastChapter: 'Chapter Pipeline：恢复上次阅读章节',
+    commandToggleRevisit: 'Chapter Pipeline：切换当前章节的稍后回看书签',
+    commandToggleImportant: 'Chapter Pipeline：切换当前章节的重点书签',
+    commandClearReadingBookmarks: 'Chapter Pipeline：清除当前笔记的阅读断点与书签',
+    commandCleanupReadingBookmarks: 'Chapter Pipeline：清理已失效的阅读断点与书签',
     resumeAvailable: '可恢复上次阅读：{title}',
     resumeUnavailable: '这篇笔记没有保存的阅读位置。',
     resumeNotFound: '保存的章节已不存在，无法恢复。',
@@ -1101,8 +1101,6 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   async onload() {
-    console.log('Loading Charter Pipeline Pro with Bilingual Settings & Tactile Sound...');
-
     await this.loadSettings();
     this.addSettingTab(new ChapterPipelineSettingTab(this.app, this));
 
@@ -2941,7 +2939,6 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   onunload() {
-    console.log('Unloading Charter Pipeline Pro');
     if (this.soundEngine && typeof this.soundEngine.destroy === 'function') {
       this.soundEngine.destroy();
     }
