@@ -20,6 +20,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      - run: npx --no-install tsc --noEmit
+      - run: npm test
       - name: Commit generated bundle
         run: |
           if git diff --quiet -- main.js; then
