@@ -13,7 +13,7 @@ const options = {
   minify: production,
   legalComments: 'none',
   logLevel: 'info',
-  ...(production ? { drop: ['console', 'debugger'] } : {})
+  drop: ['console', 'debugger']
 };
 
 if (production) {
@@ -21,5 +21,5 @@ if (production) {
 } else {
   const watchContext = await context(options);
   await watchContext.watch();
-  console.log('Charter Pipeline development build watching src/.');
+  console.log('Chapter Pipeline development build watching src/.');
 }
