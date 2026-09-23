@@ -2,7 +2,7 @@
   "id": "chapter-pipeline",
   "name": "Chapter Pipeline",
   "version": "1.2.2",
-  "minAppVersion": "0.15.0",
+  "minAppVersion": "0.15.9",
   "description": "Minimalist Linear-style floating horizontal dash stepper with KaTeX formula preview and pinned top navigation.",
   "author": "择梦舟",
   "authorUrl": "https://github.com/dreamfarer-space",
