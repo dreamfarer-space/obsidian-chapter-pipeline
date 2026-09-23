@@ -289,7 +289,10 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     if (!scroller || typeof scroller.addEventListener !== 'function') return [];
 
     if (isReading) {
-      const parent = scroller.parentElement as HTMLElement | null;
+      // Obsidian normally scrolls the preview element. Some layouts put the
+      // view root inside one scrolling `.view-content` wrapper, so inspect only
+      // that single direct parent candidate — never walk an ancestor chain.
+      const parent = container.parentElement as HTMLElement | null;
       const parentIsVerifiedScrollSource = Boolean(
         parent
         && typeof parent.addEventListener === 'function'
