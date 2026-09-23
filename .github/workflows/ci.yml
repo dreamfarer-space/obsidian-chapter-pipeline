@@ -44,9 +44,12 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
+      - name: Validate release metadata
+        run: node scripts/validate-release.mjs
+
       - name: Reject production Pro/debug branding
         run: |
-          if grep -Fq "Charter Pipeline Pro" main.js; then
+          if grep -Eq "(Charter|Chapter) Pipeline Pro" main.js; then
             echo "Production bundle still contains legacy Pro branding" >&2
             exit 1
           fi
