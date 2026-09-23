@@ -36,6 +36,47 @@ function readingNoticeText(key: 'resumeUnavailable' | 'resumeNotFound' | 'resume
 );
 
 replaceOnce(
+  `    this.settings = Object.assign({}, defaults, loadedSettings);
+
+    if (this.settings.showExcerpt === undefined) this.settings.showExcerpt = true;
+    if (typeof this.settings.excerptLength !== 'number' || this.settings.excerptLength < 60 || this.settings.excerptLength > 300) {
+      this.settings.excerptLength = 140;
+    }
+    if (this.settings.activeColor === '#10b981') this.settings.activeColor = '#3b82f6';
+    if (!this.settings.customActiveColor) this.settings.customActiveColor = '#3b82f6';
+    if (this.settings.enableSound === undefined) this.settings.enableSound = true;
+    if (this.settings.soundVolume === undefined) this.settings.soundVolume = 50;
+    if (!this.settings.dockPosition) this.settings.dockPosition = 'left';
+    if (!this.settings.hierarchyMode) this.settings.hierarchyMode = 'hover-expand';
+    if (this.settings.showProgressRail === undefined) this.settings.showProgressRail = false;
+    if (this.settings.tooltipGlassmorphism === undefined) this.settings.tooltipGlassmorphism = true;
+    if (this.settings.showChapterOrder === undefined) this.settings.showChapterOrder = false;
+    if (this.settings.readingBookmarksEnabled === undefined) this.settings.readingBookmarksEnabled = false;
+
+    this.settings.readingState = normalizeReadingState(this.settings.readingState);`,
+  `    this.settings = Object.assign({}, defaults, loadedSettings);
+    const settings = this.settings as Record<string, any>;
+
+    if (settings.showExcerpt === undefined) settings.showExcerpt = true;
+    if (typeof settings.excerptLength !== 'number' || settings.excerptLength < 60 || settings.excerptLength > 300) {
+      settings.excerptLength = 140;
+    }
+    if (settings.activeColor === '#10b981') settings.activeColor = '#3b82f6';
+    if (!settings.customActiveColor) settings.customActiveColor = '#3b82f6';
+    if (settings.enableSound === undefined) settings.enableSound = true;
+    if (settings.soundVolume === undefined) settings.soundVolume = 50;
+    if (!settings.dockPosition) settings.dockPosition = 'left';
+    if (!settings.hierarchyMode) settings.hierarchyMode = 'hover-expand';
+    if (settings.showProgressRail === undefined) settings.showProgressRail = false;
+    if (settings.tooltipGlassmorphism === undefined) settings.tooltipGlassmorphism = true;
+    if (settings.showChapterOrder === undefined) settings.showChapterOrder = false;
+    if (settings.readingBookmarksEnabled === undefined) settings.readingBookmarksEnabled = false;
+
+    settings.readingState = normalizeReadingState(settings.readingState);`,
+  'settings narrowing'
+);
+
+replaceOnce(
   "      : this.app?.workspace?.getActiveViewOfType?.(null);",
   "      : this.app?.workspace?.getActiveViewOfType?.(MarkdownView);",
   'active MarkdownView lookup'
