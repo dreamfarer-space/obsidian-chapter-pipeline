@@ -88,16 +88,23 @@ export function buildViewRenderSignature(pluginValue: unknown, view: object): st
   ].join('|');
 }
 
-/** Return true only when the signature matches and the adopted DOM is still mounted. */
+/** Return true only when the signature and both adopted resource owners still match. */
 export function canReuseRenderedSession(
-  session: { renderSignature: string; stepper: { element: HTMLElement } } | undefined,
+  session: {
+    renderSignature: string;
+    stepper: { element: HTMLElement };
+    trackingContainer: HTMLElement;
+  } | undefined,
   renderSignature: string,
-  mountedStepper: HTMLElement | null
+  mountedStepper: HTMLElement | null,
+  mountedTrackingContainer: HTMLElement | null
 ): boolean {
   return Boolean(
     session
     && session.renderSignature === renderSignature
     && mountedStepper
     && session.stepper.element === mountedStepper
+    && mountedTrackingContainer
+    && session.trackingContainer === mountedTrackingContainer
   );
 }
