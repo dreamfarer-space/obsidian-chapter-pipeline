@@ -97,6 +97,55 @@ function loadProductionPlugin() {
   return { MarkdownView, ProductionPlugin };
 }
 
+function createProductionReuseHarness() {
+  const { MarkdownView, ProductionPlugin } = loadProductionPlugin();
+  const headings = [
+    { heading: 'First', level: 1, position: { start: { line: 0 } } },
+    { heading: 'Second', level: 2, position: { start: { line: 4 } } },
+  ];
+  const stepper = { remove() {} };
+  const scroller = {
+    scrollTop: 0,
+    clientHeight: 500,
+    scrollHeight: 1000,
+    addEventListener() {},
+    removeEventListener() {},
+  };
+  const container = {
+    querySelector(selector) {
+      if (selector === '.codex-stepper-container') return stepper;
+      if (selector === '.cm-scroller') return scroller;
+      return null;
+    },
+  };
+  const view = new MarkdownView();
+  view.file = { path: 'note.md', stat: { mtime: 100 } };
+  view.contentEl = container;
+  view.getMode = () => 'source';
+
+  let cachedReads = 0;
+  const app = {
+    workspace: {
+      getLeavesOfType: () => [{ view }],
+      getActiveViewOfType: () => view,
+    },
+    metadataCache: { getFileCache: () => ({ headings }) },
+    vault: { cachedRead: () => { cachedReads += 1; return new Promise(() => {}); } },
+  };
+  const plugin = new ProductionPlugin(app, {});
+  plugin.settings.maxHeadingLevel = 2;
+  plugin.settings.hierarchyMode = 'hover-expand';
+  plugin.documentRevisions.set('note.md', 3);
+
+  return {
+    getCachedReads: () => cachedReads,
+    plugin,
+    scroller,
+    stepper,
+    view,
+  };
+}
+
 test('layout/active-leaf refreshes keep the same render signature when inputs are unchanged', () => {
   const { buildViewRenderSignature } = loadRenderSignatureModule();
   const { plugin, view } = createSignatureHarness();
@@ -131,108 +180,84 @@ test('non-render sound changes do not invalidate the mounted rail signature', ()
   assert.equal(buildViewRenderSignature(plugin, view), before);
 });
 
-test('session reuse requires identical signature and mounted stepper identity', () => {
+test('session reuse requires identical signature, stepper, and tracking scroller identity', () => {
   const { canReuseRenderedSession } = loadRenderSignatureModule();
   const stepper = {};
-  const session = { renderSignature: 'same', stepper: { element: stepper } };
-  assert.equal(canReuseRenderedSession(session, 'same', stepper), true);
-  assert.equal(canReuseRenderedSession(session, 'changed', stepper), false);
-  assert.equal(canReuseRenderedSession(session, 'same', {}), false);
-  assert.equal(canReuseRenderedSession(undefined, 'same', stepper), false);
+  const scroller = {};
+  const session = {
+    renderSignature: 'same',
+    stepper: { element: stepper },
+    trackingContainer: scroller,
+  };
+  assert.equal(canReuseRenderedSession(session, 'same', stepper, scroller), true);
+  assert.equal(canReuseRenderedSession(session, 'changed', stepper, scroller), false);
+  assert.equal(canReuseRenderedSession(session, 'same', {}, scroller), false);
+  assert.equal(canReuseRenderedSession(session, 'same', stepper, {}), false);
+  assert.equal(canReuseRenderedSession(undefined, 'same', stepper, scroller), false);
 });
 
 test('production updateAllMarkdownViews preserves an unchanged mounted session and skips cachedRead', () => {
   const { buildViewRenderSignature } = loadRenderSignatureModule();
-  const { MarkdownView, ProductionPlugin } = loadProductionPlugin();
-  const headings = [
-    { heading: 'First', level: 1, position: { start: { line: 0 } } },
-    { heading: 'Second', level: 2, position: { start: { line: 4 } } },
-  ];
-  const stepper = { remove() {} };
-  const container = {
-    querySelector(selector) {
-      return selector === '.codex-stepper-container' ? stepper : null;
-    },
+  const harness = createProductionReuseHarness();
+  let disposed = 0;
+  const session = {
+    renderSignature: buildViewRenderSignature(harness.plugin, harness.view),
+    stepper: { element: harness.stepper },
+    trackingContainer: harness.scroller,
+    dispose() { disposed += 1; },
   };
-  const view = new MarkdownView();
-  view.file = { path: 'note.md', stat: { mtime: 100 } };
-  view.contentEl = container;
-  view.getMode = () => 'preview';
+  harness.plugin.viewSessions = new Map([[harness.view, session]]);
+  harness.plugin.viewSessionVersions = new Map([[harness.view, 1]]);
 
-  let cachedReads = 0;
-  const app = {
-    workspace: {
-      getLeavesOfType: () => [{ view }],
-      getActiveViewOfType: () => view,
-    },
-    metadataCache: { getFileCache: () => ({ headings }) },
-    vault: { cachedRead: () => { cachedReads += 1; return new Promise(() => {}); } },
-  };
-  const plugin = new ProductionPlugin(app, {});
-  plugin.settings.maxHeadingLevel = 2;
-  plugin.settings.hierarchyMode = 'hover-expand';
-  plugin.documentRevisions.set('note.md', 3);
+  harness.plugin.updateAllMarkdownViews();
+  harness.plugin.updateAllMarkdownViews();
+
+  assert.equal(harness.plugin.viewSessions.get(harness.view), session);
+  assert.equal(disposed, 0);
+  assert.equal(harness.getCachedReads(), 0, 'unchanged workspace refreshes must not re-read and rebuild the note');
+});
+
+test('production updateAllMarkdownViews invalidates reuse when the tracking scroller is replaced', async () => {
+  const { buildViewRenderSignature } = loadRenderSignatureModule();
+  const harness = createProductionReuseHarness();
+  global.MutationObserver = class MutationObserver { observe() {} disconnect() {} };
 
   let disposed = 0;
   const session = {
-    renderSignature: buildViewRenderSignature(plugin, view),
-    stepper: { element: stepper },
+    renderSignature: buildViewRenderSignature(harness.plugin, harness.view),
+    stepper: { element: harness.stepper },
+    trackingContainer: {},
     dispose() { disposed += 1; },
   };
-  plugin.viewSessions = new Map([[view, session]]);
-  plugin.viewSessionVersions = new Map([[view, 1]]);
+  harness.plugin.viewSessions = new Map([[harness.view, session]]);
+  harness.plugin.viewSessionVersions = new Map([[harness.view, 1]]);
 
-  plugin.updateAllMarkdownViews();
-  plugin.updateAllMarkdownViews();
+  harness.plugin.updateAllMarkdownViews();
+  await Promise.resolve();
 
-  assert.equal(plugin.viewSessions.get(view), session);
-  assert.equal(disposed, 0);
-  assert.equal(cachedReads, 0, 'unchanged workspace refreshes must not re-read and rebuild the note');
+  assert.equal(disposed, 1);
+  assert.equal(harness.getCachedReads(), 1, 'replaced tracking DOM must rebuild the session binding');
 });
 
 test('production updateAllMarkdownViews invalidates a session after a structural setting change', async () => {
   const { buildViewRenderSignature } = loadRenderSignatureModule();
-  const { MarkdownView, ProductionPlugin } = loadProductionPlugin();
+  const harness = createProductionReuseHarness();
   global.MutationObserver = class MutationObserver { observe() {} disconnect() {} };
-
-  const headings = [{ heading: 'First', level: 1, position: { start: { line: 0 } } }];
-  const stepper = { remove() {} };
-  const container = {
-    querySelector(selector) {
-      return selector === '.codex-stepper-container' ? stepper : null;
-    },
-  };
-  const view = new MarkdownView();
-  view.file = { path: 'note.md', stat: { mtime: 100 } };
-  view.contentEl = container;
-  view.getMode = () => 'preview';
-
-  let cachedReads = 0;
-  const app = {
-    workspace: {
-      getLeavesOfType: () => [{ view }],
-      getActiveViewOfType: () => view,
-    },
-    metadataCache: { getFileCache: () => ({ headings }) },
-    vault: { cachedRead: () => { cachedReads += 1; return new Promise(() => {}); } },
-  };
-  const plugin = new ProductionPlugin(app, {});
-  plugin.settings.maxHeadingLevel = 2;
-  plugin.documentRevisions.set('note.md', 3);
 
   let disposed = 0;
   const session = {
-    renderSignature: buildViewRenderSignature(plugin, view),
-    stepper: { element: stepper },
+    renderSignature: buildViewRenderSignature(harness.plugin, harness.view),
+    stepper: { element: harness.stepper },
+    trackingContainer: harness.scroller,
     dispose() { disposed += 1; },
   };
-  plugin.viewSessions = new Map([[view, session]]);
-  plugin.viewSessionVersions = new Map([[view, 1]]);
+  harness.plugin.viewSessions = new Map([[harness.view, session]]);
+  harness.plugin.viewSessionVersions = new Map([[harness.view, 1]]);
 
-  plugin.settings.showProgressRail = true;
-  plugin.updateAllMarkdownViews();
+  harness.plugin.settings.showProgressRail = true;
+  harness.plugin.updateAllMarkdownViews();
   await Promise.resolve();
 
   assert.equal(disposed, 1);
-  assert.equal(cachedReads, 1, 'structural changes must route through the rebuild path');
+  assert.equal(harness.getCachedReads(), 1, 'structural changes must route through the rebuild path');
 });
