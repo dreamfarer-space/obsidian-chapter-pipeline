@@ -5,7 +5,7 @@ const test = require('node:test');
 const { buildSync } = require('esbuild');
 
 function loadViewSessionModule() {
-  const filename = path.join(__dirname, 'src/views/view-session.ts');
+  const filename = path.join(__dirname, '../src/views/view-session.ts');
   const result = buildSync({
     entryPoints: [filename],
     bundle: true,

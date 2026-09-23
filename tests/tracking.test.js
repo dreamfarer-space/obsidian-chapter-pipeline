@@ -26,7 +26,7 @@ Module._load = function loadWithObsidianStub(request, parent, isMain) {
   }
   return originalLoad.call(this, request, parent, isMain);
 };
-const ChapterPipelinePlugin = require('./main.js');
+const ChapterPipelinePlugin = require('../main.js');
 Module._load = originalLoad;
 
 function installRafHarness() {

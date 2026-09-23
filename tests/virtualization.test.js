@@ -6,7 +6,7 @@ const test = require('node:test');
 const { transformSync } = require('esbuild');
 
 function loadLivePreviewTracker() {
-  const filename = path.join(__dirname, 'src/views/live-preview-tracker.ts');
+  const filename = path.join(__dirname, '../src/views/live-preview-tracker.ts');
   const source = fs.readFileSync(filename, 'utf8');
   const { code } = transformSync(source, {
     loader: 'ts',
