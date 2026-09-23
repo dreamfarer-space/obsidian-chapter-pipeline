@@ -1101,8 +1101,6 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   async onload() {
-    console.log('Loading Chapter Pipeline Pro with Bilingual Settings & Tactile Sound...');
-
     await this.loadSettings();
     this.addSettingTab(new ChapterPipelineSettingTab(this.app, this));
 
@@ -2941,7 +2939,6 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   onunload() {
-    console.log('Unloading Chapter Pipeline Pro');
     if (this.soundEngine && typeof this.soundEngine.destroy === 'function') {
       this.soundEngine.destroy();
     }
