@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🪐 Charter Pipeline
+# 🪐 Chapter Pipeline
 
 **Minimalist Linear-style outline navigation for Obsidian**
 
