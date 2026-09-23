@@ -5,6 +5,8 @@ export interface LivePreviewTrackerOptions {
   onActiveChapter: (index: number) => void;
   /** Prefer a CodeMirror-derived document line when the owning view exposes one. */
   getViewportLine?: () => number | null;
+  /** Return false when this Markdown view is not the active pane. */
+  shouldTrack?: () => boolean;
   /** Set false when an existing renderer already established the initial UI state. */
   trackImmediately?: boolean;
 }
@@ -61,7 +63,7 @@ export class LivePreviewTracker {
 
         if (!shouldSchedule) return;
         if (shouldRefreshCandidates) this.candidatesDirty = true;
-        this.schedule();
+        if (this.canTrack()) this.schedule();
       });
     this.observer?.observe(this.options.container, {
       childList: true,
@@ -85,13 +87,17 @@ export class LivePreviewTracker {
     if (this.options.trackImmediately !== false) this.schedule();
   }
 
+  private canTrack(): boolean {
+    return this.options.shouldTrack?.() !== false;
+  }
+
   private readonly schedule = (): void => {
-    if (this.frame !== null || this.disposed) return;
+    if (this.frame !== null || this.disposed || !this.canTrack()) return;
     let executedSynchronously = false;
     const frame = requestAnimationFrame(() => {
       executedSynchronously = true;
       this.frame = null;
-      this.update();
+      if (this.canTrack()) this.update();
     });
     this.frame = executedSynchronously ? null : frame;
   };
