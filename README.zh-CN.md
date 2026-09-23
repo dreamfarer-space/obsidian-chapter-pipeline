@@ -8,7 +8,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
-[![Obsidian](https://img.shields.io/badge/声明最低版本-0.15.0%20(待实测)-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
+[![Obsidian](https://img.shields.io/badge/已实测最低版本-0.15.9-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 [English](README.md) · **简体中文**
@@ -27,7 +27,7 @@ Chapter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正�
 
 - **社区插件提交加固**：CI 与发布流程会校验插件 ID、显示名称、版本映射、最低版本字段、必需发布资产以及生产 bundle 一致性。
 - **最终 Chapter Pipeline 身份统一**：仓库名、显示名称、插件 ID 与发布包对齐，同时移除遗留的 `Pro` 生命周期调试日志。
-- **兼容性声明更谨慎**：Android/iOS 尚未实测，因此暂不声明移动端支持；桌面端 `0.15.0` 目前仅为声明最低版本，提交社区市场前仍需真实 Obsidian 实测。
+- **桌面兼容性已实测**：打包后的插件已在真实 Obsidian Desktop `0.15.9` 与公开稳定版 `1.13.7` 中完成 smoke test；Android/iOS 尚未实测，因此暂不声明移动端支持。
 - **干净的发布版本线**：使用 `1.2.2` 作为与 manifest 完全一致的标签，避开历史 `v1.2.1` / `1.2.1` 双标签冲突。
 
 完整历史请查看 [GitHub Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)。
@@ -180,7 +180,7 @@ CI 还会验证生产构建后 `main.js` 不会出现未提交差异。
 
 ## 兼容性验证
 
-`minAppVersion` 当前声明为 `0.15.0`，但在正式提交 Obsidian 社区插件市场前，仍必须按 [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) 在真实桌面版 Obsidian 中完成最低版本和当前稳定版的 smoke test。当前不声明 Android/iOS 支持。
+`minAppVersion` 现为 `0.15.9`。2026-09-23 已使用官方 Obsidian Desktop `0.15.9` AppImage 对打包插件完成真实加载测试；同一套 smoke matrix 也在公开稳定版 `1.13.7` 通过。完整记录见 [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)。当前不声明 Android/iOS 支持。
 
 ## 隐私
 
