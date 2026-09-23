@@ -9,15 +9,21 @@ export type ViewSessionTracker = ReadingViewTracker | LivePreviewTracker;
 
 interface CodeMirrorViewLike {
   lineBlockAtHeight?: (height: number) => { from?: number } | null;
+  documentTop?: number;
+  scaleY?: number;
   state?: {
     doc?: {
       lineAt?: (position: number) => { number?: number } | null;
     };
   };
-  scrollDOM?: HTMLElement;
 }
 
-function getLivePreviewViewportLine(view: unknown, container: HTMLElement): number | null {
+/**
+ * Resolve the document line that intersects the tracker's 70px screen-space
+ * baseline using CodeMirror's document-relative vertical coordinate system.
+ * This stays correct when the editor has top padding or a CSS vertical scale.
+ */
+export function getLivePreviewViewportLine(view: unknown, container: HTMLElement): number | null {
   const host = view as {
     editor?: unknown;
     editMode?: { editor?: unknown; cm?: unknown };
@@ -33,13 +39,21 @@ function getLivePreviewViewportLine(view: unknown, container: HTMLElement): numb
 
   for (const candidate of candidates) {
     const cm = candidate as CodeMirrorViewLike;
-    if (typeof cm.lineBlockAtHeight !== 'function' || typeof cm.state?.doc?.lineAt !== 'function') continue;
+    if (
+      typeof cm.lineBlockAtHeight !== 'function'
+      || typeof cm.state?.doc?.lineAt !== 'function'
+      || typeof cm.documentTop !== 'number'
+      || !Number.isFinite(cm.documentTop)
+    ) {
+      continue;
+    }
 
-    const scrollDOM = cm.scrollDOM ?? container.querySelector<HTMLElement>('.cm-scroller');
-    if (!scrollDOM) continue;
-
-    const baseline = Math.max(0, (scrollDOM.scrollTop || 0) + 70);
-    const lineBlock = cm.lineBlockAtHeight(baseline);
+    const screenBaseline = container.getBoundingClientRect().top + 70;
+    const scaleY = typeof cm.scaleY === 'number' && Number.isFinite(cm.scaleY) && cm.scaleY > 0
+      ? cm.scaleY
+      : 1;
+    const documentHeight = Math.max(0, (screenBaseline - cm.documentTop) / scaleY);
+    const lineBlock = cm.lineBlockAtHeight(documentHeight);
     if (!lineBlock || typeof lineBlock.from !== 'number') continue;
 
     const line = cm.state.doc.lineAt(lineBlock.from);
@@ -134,14 +148,17 @@ export class ViewSession {
     this.tracker.setChapters(this.chapters);
   }
 
+  /** Return the immutable chapter snapshot owned by this view session. */
   getChapters(): readonly ChapterNode[] {
     return this.chapters;
   }
 
+  /** Return the currently active chapter index, or -1 before the first update. */
   getActiveIndex(): number {
     return this.activeIndex;
   }
 
+  /** Release the tracker, UI adapters, and chapter snapshot for this view. */
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
