@@ -12,8 +12,8 @@ function replaceOnce(needle, replacement, label) {
 
 replaceOnce(
   "import { ChapterParser } from './core/parser';",
-  "import { MarkdownView } from 'obsidian';\nimport { ChapterParser } from './core/parser';",
-  'MarkdownView import'
+  "import { MarkdownView } from 'obsidian';\nimport { DEFAULT_SETTINGS } from './constants';\nimport { ChapterParser } from './core/parser';",
+  'production imports'
 );
 
 replaceOnce(
@@ -36,7 +36,18 @@ function readingNoticeText(key: 'resumeUnavailable' | 'resumeNotFound' | 'resume
 );
 
 replaceOnce(
-  `    this.settings = Object.assign({}, defaults, loadedSettings);
+  `    const defaults = this.settings && typeof this.settings === 'object' ? this.settings : {};
+    const loaded = await this.loadData?.();
+    const loadedSettings = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
+    this.settings = Object.assign({}, defaults, loadedSettings);`,
+  `    const loaded = await this.loadData?.();
+    const loadedSettings = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);`,
+  'typed defaults'
+);
+
+replaceOnce(
+  `    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
 
     if (this.settings.showExcerpt === undefined) this.settings.showExcerpt = true;
     if (typeof this.settings.excerptLength !== 'number' || this.settings.excerptLength < 60 || this.settings.excerptLength > 300) {
@@ -54,7 +65,7 @@ replaceOnce(
     if (this.settings.readingBookmarksEnabled === undefined) this.settings.readingBookmarksEnabled = false;
 
     this.settings.readingState = normalizeReadingState(this.settings.readingState);`,
-  `    this.settings = Object.assign({}, defaults, loadedSettings);
+  `    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
     const settings = this.settings as Record<string, any>;
 
     if (settings.showExcerpt === undefined) settings.showExcerpt = true;
@@ -63,12 +74,12 @@ replaceOnce(
     }
     if (settings.activeColor === '#10b981') settings.activeColor = '#3b82f6';
     if (!settings.customActiveColor) settings.customActiveColor = '#3b82f6';
-    if (settings.enableSound === undefined) settings.enableSound = true;
+    if (settings.enableSound === undefined) settings.enableSound = false;
     if (settings.soundVolume === undefined) settings.soundVolume = 50;
     if (!settings.dockPosition) settings.dockPosition = 'left';
     if (!settings.hierarchyMode) settings.hierarchyMode = 'hover-expand';
     if (settings.showProgressRail === undefined) settings.showProgressRail = false;
-    if (settings.tooltipGlassmorphism === undefined) settings.tooltipGlassmorphism = true;
+    if (settings.tooltipGlassmorphism === undefined) settings.tooltipGlassmorphism = false;
     if (settings.showChapterOrder === undefined) settings.showChapterOrder = false;
     if (settings.readingBookmarksEnabled === undefined) settings.readingBookmarksEnabled = false;
 
@@ -119,6 +130,12 @@ replaceOnce(
   "      const message = this.translateReadingString?.('resumeAvailable', { title }) ?? `Resume available: ${title}`;",
   "      const message = readingNoticeText('resumeAvailable', title);",
   'resume available notice'
+);
+
+replaceOnce(
+  "        if (!current.identity) current.identity = normalizeChapterIdentity(marker.identity);",
+  "        if (!current.identity) {\n          const identity = normalizeChapterIdentity(marker.identity);\n          if (identity) current.identity = identity;\n        }",
+  'avoid undefined identity property'
 );
 
 fs.writeFileSync(path, source);
