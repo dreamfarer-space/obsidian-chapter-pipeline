@@ -65,11 +65,11 @@ jobs:
       - name: Typecheck
         run: npx --no-install tsc --noEmit
 
-      - name: Run tests
-        run: npm test
-
       - name: Build production bundle
         run: npm run build
+
+      - name: Run tests against rebuilt bundle
+        run: npm test
 
       - name: Validate release metadata
         run: node scripts/validate-release.mjs
