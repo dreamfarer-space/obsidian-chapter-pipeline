@@ -182,16 +182,28 @@ function installTypedProductionSessions(): void {
         this.viewSessionVersions?.delete(sessionView);
       });
 
-      // Workspace refresh events are noisy. If the structural signature and the
-      // adopted DOM are unchanged, keep the session, tooltip, observer, and
-      // scroll listener alive instead of routing through the legacy teardown.
+      // Workspace refresh events are noisy. If the structural signature and both
+      // adopted DOM owners are unchanged, keep the session, tooltip, observer,
+      // and scroll listener alive instead of routing through legacy teardown.
       leaves.forEach((leaf) => {
         const view = leaf?.view;
         if (!view || typeof view !== 'object') return;
         const typedView = view as { contentEl?: HTMLElement };
-        const mountedStepper = typedView.contentEl?.querySelector('.codex-stepper-container') as HTMLElement | null;
+        const container = typedView.contentEl;
+        const mountedStepper = container?.querySelector('.codex-stepper-container') as HTMLElement | null;
+        const isReading = container ? this.isReadingMode?.(view, container) === true : false;
+        const mountedTrackingContainer = container
+          ? (isReading
+            ? this.getViewScroller?.(container, view) ?? (container.querySelector('.markdown-preview-view') as HTMLElement | null)
+            : this.getViewScroller?.(container, view) ?? (container.querySelector('.cm-scroller') as HTMLElement | null))
+          : null;
         const renderSignature = buildViewRenderSignature(this, view);
-        if (canReuseRenderedSession(this.viewSessions?.get(view), renderSignature, mountedStepper)) return;
+        if (canReuseRenderedSession(
+          this.viewSessions?.get(view),
+          renderSignature,
+          mountedStepper,
+          mountedTrackingContainer
+        )) return;
         void prototype.attachStepperToView?.call(this, view);
       });
     };
