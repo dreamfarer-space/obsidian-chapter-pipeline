@@ -80,6 +80,8 @@ export interface ViewSessionOptions {
   onSelectChapter: (chapter: ChapterNode) => void;
   onActiveChapter: (index: number, previousIndex: number) => void;
   onScrollTick?: () => void;
+  /** Return false when the owning Markdown pane is inactive. */
+  shouldTrack?: () => boolean;
   /** Disable the first geometry pass when adopting UI already initialized by a compatibility renderer. */
   trackImmediately?: boolean;
 }
@@ -140,6 +142,7 @@ export class ViewSession {
         findHeadings: options.findReadingHeading,
         onActiveChapter: handleActiveChapter,
         onScrollTick: options.onScrollTick,
+        shouldTrack: options.shouldTrack,
         trackImmediately: options.trackImmediately,
       });
     } else {
@@ -147,6 +150,7 @@ export class ViewSession {
         container: options.container,
         onActiveChapter: handleActiveChapter,
         getViewportLine: () => getLivePreviewViewportLine(options.view, options.container),
+        shouldTrack: options.shouldTrack,
         trackImmediately: options.trackImmediately,
       });
     }

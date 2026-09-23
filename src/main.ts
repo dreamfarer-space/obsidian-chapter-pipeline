@@ -30,6 +30,7 @@ interface ProductionPlugin {
   app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
   getViewScroller?: (container: HTMLElement, view: object) => HTMLElement | null;
+  isActiveMarkdownView?: (view: object) => boolean;
   isReadingMode?: (view: object, container?: HTMLElement | null) => boolean;
   jumpToHeading?: (view: object, chapter: ChapterNode) => void;
   recordReadingPosition?: (view: object, chapter: ChapterNode) => void;
@@ -122,6 +123,9 @@ function installTypedProductionSessions(): void {
       tooltipElement,
       renderSignature,
       hierarchyMode,
+      // The session stays attached to its exact Markdown scroller so split-pane
+      // UI remains stable, but inactive panes do no geometry/chapter work.
+      shouldTrack: () => this.isActiveMarkdownView?.(view) !== false,
       // Legacy has already established the initial dash/rail state. The typed
       // tracker becomes authoritative from the first real scroll/mutation.
       trackImmediately: false,

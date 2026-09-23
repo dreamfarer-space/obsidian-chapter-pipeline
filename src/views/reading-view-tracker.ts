@@ -5,6 +5,8 @@ export interface ReadingTrackerOptions {
   findHeadings: (chapter: ChapterNode) => Element | null;
   onActiveChapter: (index: number) => void;
   onScrollTick?: () => void;
+  /** Return false when this Markdown view is not the active pane. */
+  shouldTrack?: () => boolean;
   /** Set false when an existing renderer already established the initial UI state. */
   trackImmediately?: boolean;
 }
@@ -31,8 +33,12 @@ export class ReadingViewTracker {
     if (this.options.trackImmediately !== false) this.schedule();
   }
 
+  private canTrack(): boolean {
+    return this.options.shouldTrack?.() !== false;
+  }
+
   private readonly handleScroll = (): void => {
-    if (this.disposed) return;
+    if (this.disposed || !this.canTrack()) return;
     const top = this.options.container.scrollTop;
     if (Math.abs(top - this.lastScrollTop) < 1) return;
     this.lastScrollTop = top;
@@ -40,12 +46,12 @@ export class ReadingViewTracker {
   };
 
   private schedule(): void {
-    if (this.frame !== null || this.disposed) return;
+    if (this.frame !== null || this.disposed || !this.canTrack()) return;
     let executedSynchronously = false;
     const frame = requestAnimationFrame(() => {
       executedSynchronously = true;
       this.frame = null;
-      this.update();
+      if (this.canTrack()) this.update();
     });
     this.frame = executedSynchronously ? null : frame;
   }

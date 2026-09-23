@@ -53,6 +53,7 @@ class FakeContainer {
     this.listeners = new Map();
     this.rendered = [];
     this.queryCount = 0;
+    this.rectReads = 0;
   }
 
   addEventListener(type, listener) {
@@ -71,6 +72,7 @@ class FakeContainer {
   }
 
   getBoundingClientRect() {
+    this.rectReads += 1;
     return { top: 0 };
   }
 
@@ -247,5 +249,101 @@ test('LivePreviewTracker reuses rendered candidates and binary-searches 1000 hea
   flushRaf();
   assert.equal(container.queryCount, 2, 'candidate additions should invalidate the rendered candidate cache once');
 
+  tracker.dispose();
+});
+
+test('ReadingViewTracker performs no geometry or chapter lookup work while its pane is inactive', () => {
+  const flushRaf = installRafHarness();
+  const container = new FakeContainer();
+  let activePane = false;
+  let headingLookups = 0;
+  let geometryReads = 0;
+  let activeChanges = 0;
+
+  const tracker = new ChapterPipelinePlugin.ReadingViewTracker({
+    container,
+    shouldTrack: () => activePane,
+    findHeadings() {
+      headingLookups += 1;
+      return {
+        isConnected: true,
+        getBoundingClientRect() {
+          geometryReads += 1;
+          return { top: 0 };
+        },
+      };
+    },
+    onActiveChapter() {
+      activeChanges += 1;
+    },
+  });
+
+  tracker.setChapters(makeChapters(10));
+  flushRaf();
+  container.scrollTop = 100;
+  container.dispatch('scroll');
+  flushRaf();
+
+  assert.equal(container.rectReads, 0);
+  assert.equal(headingLookups, 0);
+  assert.equal(geometryReads, 0);
+  assert.equal(activeChanges, 0);
+
+  activePane = true;
+  container.scrollTop = 200;
+  container.dispatch('scroll');
+  flushRaf();
+  assert.ok(container.rectReads > 0);
+  assert.ok(headingLookups > 0);
+  assert.ok(activeChanges > 0);
+  tracker.dispose();
+});
+
+test('LivePreviewTracker performs no viewport or DOM work while its pane is inactive', () => {
+  const flushRaf = installRafHarness();
+  global.MutationObserver = FakeMutationObserver;
+  FakeMutationObserver.instances = [];
+
+  const container = new FakeContainer();
+  let activePane = false;
+  let viewportReads = 0;
+  let activeChanges = 0;
+  container.rendered = makeChapters(10).map((chapter, index) => makeRenderedCandidate(
+    chapter,
+    index,
+    container,
+    () => {},
+  ));
+
+  const tracker = new ChapterPipelinePlugin.LivePreviewTracker({
+    container,
+    shouldTrack: () => activePane,
+    getViewportLine() {
+      viewportReads += 1;
+      return 3;
+    },
+    onActiveChapter() {
+      activeChanges += 1;
+    },
+  });
+
+  tracker.setChapters(makeChapters(10));
+  flushRaf();
+  container.scrollTop = 100;
+  container.dispatch('scroll');
+  flushRaf();
+
+  assert.equal(container.rectReads, 0);
+  assert.equal(container.queryCount, 0);
+  assert.equal(viewportReads, 0);
+  assert.equal(activeChanges, 0);
+
+  activePane = true;
+  container.scrollTop = 200;
+  container.dispatch('scroll');
+  flushRaf();
+  assert.ok(container.rectReads > 0);
+  assert.equal(viewportReads, 1);
+  assert.equal(activeChanges, 1);
   tracker.dispose();
 });
