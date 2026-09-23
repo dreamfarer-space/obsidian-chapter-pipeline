@@ -8,13 +8,13 @@ This document records the release decisions and the manual verification gate for
 - Plugin ID: `chapter-pipeline`
 - Repository: `dreamfarer-space/obsidian-chapter-pipeline`
 - Required release assets: `main.js`, `manifest.json`, `styles.css`
-- Release tag: exactly the version from `manifest.json` (for example `1.2.1`, with no `v` prefix)
+- Release tag: exactly the version from `manifest.json` (for example `1.2.2`, with no `v` prefix)
 
 The plugin ID remains `chapter-pipeline`. It is the existing identifier and is now aligned with the final Chapter Pipeline product/repository name. Do not change it after publication.
 
 ## Compatibility declaration
 
-`manifest.json` currently declares `minAppVersion: 0.15.0`, and `versions.json` maps `1.2.1` to the same minimum. That value is **not considered verified merely because the project builds**. Do not submit the plugin with an unverified minimum version.
+`manifest.json` currently declares `minAppVersion: 0.15.0`, and `versions.json` maps `1.2.2` to the same minimum. That value is **not considered verified merely because the project builds**. Do not submit the plugin with an unverified minimum version.
 
 The repository's automated checks verify TypeScript compatibility, unit tests, production bundling, dependency audit, release metadata consistency, and generated bundle consistency. They do **not** replace launching the plugin inside Obsidian.
 
@@ -44,6 +44,7 @@ Mobile support can be enabled later by setting `isDesktopOnly: false` only after
 ## Current readiness status
 
 - Plugin identity: decided (`chapter-pipeline`, display name `Chapter Pipeline`).
+- Release version: `1.2.2`, avoiding the historical `v1.2.1` / `1.2.1` release collision.
 - Release tag/assets: automated and ready.
 - Pre-approval installation docs: BRAT/manual path required.
 - Mobile claim: disabled conservatively with `isDesktopOnly: true` until explicit mobile testing exists.
