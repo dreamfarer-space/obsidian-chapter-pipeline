@@ -47,13 +47,32 @@ export function truncateExcerpt(text: string, maxLength = 200): string {
 }
 
 function stripHtmlComments(input: string): string {
-  let current = input;
-  let previous: string;
-  do {
-    previous = current;
-    current = current.replace(/<!--[\s\S]*?-->/g, '');
-  } while (current !== previous);
-  return current.replace(/<!--|-->/g, '');
+  let result = '';
+  let startIndex = 0;
+  while (startIndex < input.length) {
+    const commentStart = input.indexOf('<!--', startIndex);
+    if (commentStart === -1) {
+      result += input.slice(startIndex);
+      break;
+    }
+    result += input.slice(startIndex, commentStart);
+    const commentEnd = input.indexOf('-->', commentStart + 4);
+    const commentEndAlt = input.indexOf('--!>', commentStart + 4);
+    let endPos = -1;
+    if (commentEnd !== -1 && commentEndAlt !== -1) {
+      endPos = Math.min(commentEnd + 3, commentEndAlt + 4);
+    } else if (commentEnd !== -1) {
+      endPos = commentEnd + 3;
+    } else if (commentEndAlt !== -1) {
+      endPos = commentEndAlt + 4;
+    }
+
+    if (endPos === -1) {
+      break;
+    }
+    startIndex = endPos;
+  }
+  return result;
 }
 
 export function normalizeHeadingText(text: unknown): string {
