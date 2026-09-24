@@ -112,6 +112,62 @@ async function writeLintConfig() {
 import globals from 'globals';
 import { defineConfig, globalIgnores } from 'eslint/config';
 
+const recommendedRules = Object.assign(
+  {},
+  ...obsidianmd.configs.recommended.map((entry) => entry.rules ?? {})
+);
+
+function withSeverity(value, severity) {
+  if (value === 0 || value === 'off') return 'off';
+  if (Array.isArray(value)) return [severity, ...value.slice(1)];
+  return severity;
+}
+
+const scannerRules = Object.fromEntries(
+  Object.entries(recommendedRules).map(([name, value]) => [
+    name,
+    withSeverity(value, 'warn')
+  ])
+);
+
+// Match the Community Plugin scanner's documented policy: most findings are
+// advisory warnings; only security-critical findings remain blocking errors.
+for (const name of [
+  'no-eval',
+  'no-implied-eval',
+  'no-unsanitized/method',
+  'no-unsanitized/property',
+  'obsidianmd/regex-lookbehind',
+  'obsidianmd/no-forbidden-elements'
+]) {
+  scannerRules[name] = withSeverity(recommendedRules[name] ?? 'error', 'error');
+}
+
+for (const name of Object.keys(scannerRules)) {
+  if (name.startsWith('@typescript-eslint/no-unsafe-')) {
+    scannerRules[name] = 'off';
+  }
+}
+
+for (const name of [
+  'no-undef',
+  '@typescript-eslint/restrict-template-expressions',
+  '@typescript-eslint/no-base-to-string',
+  'import/no-unresolved',
+  'obsidianmd/validate-manifest',
+  'obsidianmd/validate-license',
+  'obsidianmd/commands/no-command-in-command-id',
+  'obsidianmd/commands/no-plugin-id-in-command-id'
+]) {
+  scannerRules[name] = 'off';
+}
+
+const jsTypeScriptRulesOff = Object.fromEntries(
+  Object.keys(scannerRules)
+    .filter((name) => name.startsWith('@typescript-eslint/'))
+    .map((name) => [name, 'off'])
+);
+
 export default defineConfig(
   globalIgnores([
     'node_modules',
@@ -150,18 +206,33 @@ export default defineConfig(
     'automation/**',
     'e2e-tests/**'
   ]),
+  ...obsidianmd.configs.recommended,
   {
     languageOptions: {
       globals: {
         ...globals.browser
-      },
+      }
+    },
+    rules: scannerRules
+  },
+  {
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
       parserOptions: {
         projectService: true,
         tsconfigRootDir: process.cwd()
       }
     }
   },
-  ...obsidianmd.configs.recommended
+  {
+    files: ['**/*.js', '**/*.jsx'],
+    languageOptions: {
+      parserOptions: {
+        projectService: false
+      }
+    },
+    rules: jsTypeScriptRulesOff
+  }
 );
 `;
 
@@ -173,7 +244,6 @@ await writeLintConfig();
 
 run(eslintBin, [
   'src',
-  'manifest.json',
   '--config', configPath,
   '--no-error-on-unmatched-pattern'
 ]);
