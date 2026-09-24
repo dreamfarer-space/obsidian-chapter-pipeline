@@ -34,15 +34,17 @@ const configPath = join(toolRoot, 'eslint.config.mjs');
 const eslintBin = join(
   toolRoot,
   'node_modules',
-  '.bin',
-  process.platform === 'win32' ? 'eslint.cmd' : 'eslint'
+  'eslint',
+  'bin',
+  'eslint.js'
 );
 
 function run(command, args, options = {}) {
+  const isWinCmd = process.platform === 'win32' && /\.(cmd|bat)$/i.test(command);
   const result = spawnSync(command, args, {
     cwd: repoRoot,
     stdio: 'inherit',
-    shell: false,
+    shell: isWinCmd,
     ...options
   });
 
@@ -227,7 +229,8 @@ export default defineConfig(
 await ensureToolchain();
 await writeLintConfig();
 
-run(eslintBin, [
+run(process.execPath, [
+  eslintBin,
   'src',
   '--config', configPath,
   '--no-error-on-unmatched-pattern'

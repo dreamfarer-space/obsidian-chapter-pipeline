@@ -1,30 +1,13 @@
 import { Setting } from 'obsidian';
 import { normalizeHeadingText } from './core/parser';
-
-// Small runtime patch layer for the remaining legacy coordinator. These patches
-// intentionally target the production prototype so they affect the bundled
-// plugin while the coordinator continues its incremental TypeScript migration.
-// eslint-disable-next-line @typescript-eslint/no-var-requires -- Load the legacy helper module while the runtime patch layer is migrated to typed modules.
-const {
+import { ChapterPipelineCoordinator } from './plugin-coordinator';
+import {
   hashHeadingSequence,
-  nextCalibrationState
-} = require('./runtime-helpers.js') as {
-  hashHeadingSequence: (headings: unknown[]) => string;
-  nextCalibrationState: (
-    state: { frames?: number; stableFrames?: number },
-    error: number,
-    options?: { maxFrames?: number; threshold?: number; stableFramesRequired?: number }
-  ) => CalibrationState;
-};
+  nextCalibrationState,
+  type CalibrationState
+} from './runtime-helpers';
 
 type LegacyPluginConstructor = { prototype: Record<string, any> };
-type CalibrationState = {
-  frames: number;
-  stableFrames: number;
-  converged: boolean;
-  hitCap: boolean;
-  shouldContinue: boolean;
-};
 
 type ReadingHeadingEntry = {
   element: Element;
@@ -168,15 +151,17 @@ function resolveReadingHeading(
   return null;
 }
 
-export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstructor): void {
-  const proto = LegacyPlugin.prototype;
-  if (proto.__chapterIssue14Patched) return;
-  proto.__chapterIssue14Patched = true;
+/**
+ * Typed performance and Reading View navigation layer extending the base
+ * plugin coordinator without prototype monkey-patching.
+ */
+export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
+  private readonly headingFingerprints = new Map<string, string>();
+  private readonly readingHeadingSnapshots = new WeakMap<object, ReadingHeadingSnapshot>();
 
-  const originalLoadSettings = proto.loadSettings;
-  proto.loadSettings = async function patchedLoadSettings(...args: unknown[]) {
+  override async loadSettings(): Promise<void> {
     const persisted = await this.loadData?.();
-    await originalLoadSettings.apply(this, args);
+    await super.loadSettings();
 
     const saved = persisted && typeof persisted === 'object' && !Array.isArray(persisted)
       ? persisted as Record<string, unknown>
@@ -197,10 +182,9 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     }
 
     if (changed) await this.saveSettings?.();
-  };
+  }
 
-  const originalOnload = proto.onload;
-  proto.onload = async function patchedOnload(...args: unknown[]) {
+  override async onload(): Promise<void> {
     const originalAddSettingTab = this.addSettingTab?.bind(this);
     if (originalAddSettingTab) {
       this.addSettingTab = (tab: any) => {
@@ -227,7 +211,7 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     }
 
     try {
-      const result = await originalOnload.apply(this, args);
+      const result = await super.onload();
       const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
       if (playScrollTick && !this.soundEngine.__chapterScrollSoundGuarded) {
         this.soundEngine.__chapterScrollSoundGuarded = true;
@@ -239,11 +223,9 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     } finally {
       if (originalAddSettingTab) this.addSettingTab = originalAddSettingTab;
     }
-  };
+  }
 
-  const headingFingerprints = new WeakMap<object, Map<string, string>>();
-  const originalExtractChapters = proto.extractChapters;
-  proto.extractChapters = function patchedExtractChapters(content: string, file: any, parserSettings?: unknown) {
+  override extractChapters(content: string, file: any, parserSettings: unknown = this.settings): any {
     const filePath = typeof file?.path === 'string' ? file.path : '';
     const cachedHeadings = filePath
       ? this.app?.metadataCache?.getFileCache?.(file)?.headings
@@ -253,12 +235,7 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
       : fallbackHeadings(content);
     const fingerprint = hashHeadingSequence(headings);
 
-    let fingerprints = headingFingerprints.get(this);
-    if (!fingerprints) {
-      fingerprints = new Map<string, string>();
-      headingFingerprints.set(this, fingerprints);
-    }
-    const previous = fingerprints.get(filePath);
+    const previous = this.headingFingerprints.get(filePath);
     if (previous !== undefined && previous !== fingerprint) {
       this.documentRevisions?.set(
         filePath,
@@ -266,15 +243,12 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
       );
       this.chapterCache?.deleteByPrefix?.(`${filePath}|`);
     }
-    fingerprints.set(filePath, fingerprint);
+    this.headingFingerprints.set(filePath, fingerprint);
 
-    return originalExtractChapters.call(this, content, file, parserSettings);
-  };
+    return super.extractChapters(content, file, parserSettings);
+  }
 
-  // Issue #11: only the actual Markdown scroller (or one directly verified
-  // scrolling parent in Reading View) is a production source. Never bind the
-  // document, window, or an arbitrary ancestor chain.
-  proto.getViewScrollers = function scopedGetViewScrollers(container: HTMLElement | null, view: any = null) {
+  override getViewScrollers(container: HTMLElement | null, view: any = null): any[] {
     if (!container) return [];
     if (
       view
@@ -291,9 +265,6 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     if (!scroller || typeof scroller.addEventListener !== 'function') return [];
 
     if (isReading) {
-      // Obsidian normally scrolls the preview element. Some layouts put the
-      // view root inside one scrolling `.view-content` wrapper, so inspect only
-      // that single direct host candidate — never walk an ancestor chain.
       const parent = container.parentElement as HTMLElement | null;
       const parentIsVerifiedScrollSource = Boolean(
         parent
@@ -306,39 +277,28 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
     }
 
     return [scroller];
-  };
-
-  // The legacy renderer still asks for an initial active line while it creates
-  // DOM. Inactive panes skip that expensive compatibility calculation entirely;
-  // their typed tracker will become authoritative after activation and scrolling.
-  const originalGetCurrentEditorTopLine = proto.getCurrentEditorTopLine;
-  if (typeof originalGetCurrentEditorTopLine === 'function') {
-    proto.getCurrentEditorTopLine = function scopedGetCurrentEditorTopLine(view: any, ...args: unknown[]) {
-      if (
-        view
-        && this.app?.workspace?.getActiveViewOfType
-        && typeof this.isActiveMarkdownView === 'function'
-        && !this.isActiveMarkdownView(view)
-      ) {
-        return 0;
-      }
-      return originalGetCurrentEditorTopLine.call(this, view, ...args);
-    };
   }
 
-  // Cache the Reading View heading index per preview scroller. The typed
-  // ReadingViewTracker asks for individual chapters while scrolling; resolving
-  // them against this snapshot avoids a full h1..h6 query for every lookup.
-  const readingHeadingSnapshots = new WeakMap<object, ReadingHeadingSnapshot>();
-  const originalGetReadingHeading = proto.getReadingHeading;
-  proto.getReadingHeading = function cachedGetReadingHeading(view: any, chapter: any) {
-    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
-    if (!scroller) return originalGetReadingHeading?.call(this, view, chapter) ?? null;
+  override getCurrentEditorTopLine(view: any, container?: any, chapters: any = []): any {
+    if (
+      view
+      && this.app?.workspace?.getActiveViewOfType
+      && typeof this.isActiveMarkdownView === 'function'
+      && !this.isActiveMarkdownView(view)
+    ) {
+      return 0;
+    }
+    return super.getCurrentEditorTopLine(view, container, chapters);
+  }
 
-    let snapshot = readingHeadingSnapshots.get(scroller);
+  override getReadingHeading(view: any, chapter: any): any {
+    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
+    if (!scroller) return super.getReadingHeading(view, chapter) ?? null;
+
+    let snapshot = this.readingHeadingSnapshots.get(scroller);
     if (!snapshot) {
       snapshot = buildReadingHeadingSnapshot(scroller);
-      readingHeadingSnapshots.set(scroller, snapshot);
+      this.readingHeadingSnapshots.set(scroller, snapshot);
     }
 
     let resolved = resolveReadingHeading(snapshot, scroller, chapter);
@@ -346,32 +306,25 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
       return resolved;
     }
 
-    // Reading View can virtualize or replace chunks. Refresh only when a cached
-    // target disappeared or a lookup misses, never by scanning the whole cached
-    // snapshot on every chapter resolution.
     snapshot = buildReadingHeadingSnapshot(scroller);
-    readingHeadingSnapshots.set(scroller, snapshot);
+    this.readingHeadingSnapshots.set(scroller, snapshot);
     resolved = resolveReadingHeading(snapshot, scroller, chapter);
     return resolved;
-  };
+  }
 
-  const originalAttachStepperToView = proto.attachStepperToView;
-  proto.attachStepperToView = async function patchedAttachStepperToView(view: any) {
+  override async attachStepperToView(view: any): Promise<any> {
     const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view');
-    if (scroller) readingHeadingSnapshots.delete(scroller);
+    if (scroller) this.readingHeadingSnapshots.delete(scroller);
 
-    const result = await originalAttachStepperToView.call(this, view);
-    const tooltip = this.viewTooltips?.get?.(view);
+    const result = await super.attachStepperToView(view);
+    const tooltip = result?.tooltipElement ?? this.viewTooltips?.get?.(view);
     if (tooltip?.classList) {
-      // A plugin-local layer above note content without dominating app chrome,
-      // menus, modals, or other global overlays.
       tooltip.classList.add('codex-floating-tooltip--view-layer');
     }
     return result;
-  };
+  }
 
-  const originalJumpToHeading = proto.jumpToHeading;
-  proto.jumpToHeading = function patchedJumpToHeading(view: any, chapter: any) {
+  override jumpToHeading(view: any, chapter: any): any {
     const targetView = view && view.file ? view : null;
     const line = typeof chapter === 'number' ? chapter : chapter?.line;
     const isReading = targetView && this.isReadingMode?.(targetView, targetView.contentEl);
@@ -383,7 +336,7 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
       : null;
 
     if (!targetView || line === undefined || !previewScroller) {
-      return originalJumpToHeading.call(this, view, chapter);
+      return super.jumpToHeading(view, chapter);
     }
 
     const headingText = typeof chapter === 'object' && chapter
@@ -447,5 +400,11 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
 
     this.scheduleFrame(calibratePreview);
     return undefined;
-  };
+  }
+}
+
+export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstructor): void {
+  const proto = LegacyPlugin.prototype;
+  if (proto.__chapterIssue14Patched) return;
+  proto.__chapterIssue14Patched = true;
 }
