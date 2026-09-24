@@ -202,6 +202,9 @@ export default defineConfig(
   ]),
   ...obsidianmd.configs.recommended,
   {
+    linterOptions: {
+      reportUnusedDisableDirectives: 'warn'
+    },
     languageOptions: {
       globals: {
         ...globals.browser
