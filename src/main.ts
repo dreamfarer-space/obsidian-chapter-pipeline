@@ -53,7 +53,7 @@ interface ProductionPlugin {
 const LegacyPlugin = require('./legacy-main.js') as {
   new (...args: unknown[]): ProductionPlugin;
   prototype: ProductionPlugin & {
-    attachStepperToView?: (view: object) => Promise<LegacyRenderResult | undefined>;
+    attachStepperToView?: (view: object) => Promise<LegacyRenderResult | undefined | void>;
     onunload?: () => void;
   };
 };
