@@ -27,14 +27,23 @@ interface LegacyScrollBinding {
   handler?: (...args: unknown[]) => void;
 }
 
+interface LegacyRenderResult {
+  hostContainer: HTMLElement;
+  chapters: ChapterNode[];
+  stepperElement: HTMLElement;
+  dashElements: HTMLElement[];
+  tooltipElement: HTMLElement | null;
+  railIndicator: HTMLElement | null;
+  trackingContainer: HTMLElement | null;
+  mode: 'reading' | 'live-preview';
+}
+
 interface ProductionPlugin {
   settings?: Record<string, unknown>;
   soundEngine?: { playScrollTick?: (volume: number) => void };
   scrollBindings?: Map<unknown, LegacyScrollBinding>;
   sessionCoordinator?: SessionCoordinator<object, ViewSession>;
-  viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
   fileChapterSnapshots?: Map<string, ChapterNode[]>;
-  viewTooltips?: Map<object, HTMLElement>;
   app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
   getViewScroller?: (container: HTMLElement, view: object) => HTMLElement | null;
@@ -81,7 +90,9 @@ function installTypedProductionSessions(): void {
     updateAllMarkdownViews?: () => void;
     onunload?: () => void;
   };
-  const legacyAttach = prototype.attachStepperToView;
+  const legacyAttach = prototype.attachStepperToView as
+    | ((view: object) => Promise<LegacyRenderResult | undefined>)
+    | undefined;
   if (!legacyAttach || (legacyAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled) return;
 
   /** Attach one generation-guarded typed session after the compatibility renderer finishes. */
@@ -89,36 +100,32 @@ function installTypedProductionSessions(): void {
     const coordinator = getSessionCoordinator(this);
     const sessionGeneration = coordinator.begin(view);
 
-    await legacyAttach.call(this, view);
-    if (!coordinator.isCurrent(view, sessionGeneration)) return;
+    const rendered = await legacyAttach.call(this, view);
+    if (!coordinator.isCurrent(view, sessionGeneration) || !rendered) return;
 
     const typedView = view as { contentEl?: HTMLElement; file?: unknown };
-    const container = typedView?.contentEl;
-    if (!container || !typedView.file || typeof typedView.file !== 'object') return;
+    const container = rendered.hostContainer;
+    if (!typedView.file || typeof typedView.file !== 'object' || typedView.contentEl !== container) return;
 
-    const stepperElement = container.querySelector('.codex-stepper-container') as HTMLElement | null;
-    if (!stepperElement) return;
+    const {
+      chapters,
+      stepperElement,
+      dashElements,
+      tooltipElement,
+      railIndicator,
+      trackingContainer: scroller,
+      mode
+    } = rendered;
+    if (!chapters.length || !scroller) return;
 
-    const chapters = this.viewChapterSnapshots?.get(view) ?? [];
-    if (!chapters.length) return;
-
-    const dashElements = Array.from(container.querySelectorAll('.codex-dash-item')) as HTMLElement[];
-    const tooltipElement = this.viewTooltips?.get(view) ?? null;
-    const isReading = this.isReadingMode?.(view, container) === true;
-    const scroller = isReading
-      ? this.getViewScroller?.(container, view) ?? (container.querySelector('.markdown-preview-view') as HTMLElement | null)
-      : this.getViewScroller?.(container, view) ?? (container.querySelector('.cm-scroller') as HTMLElement | null);
-
-    if (!scroller) return;
     removeLegacyScrollBinding(this, container);
 
     const hierarchyMode = (this.settings?.hierarchyMode ?? 'all') as 'all' | 'hover-expand' | 'active-branch';
-    const railIndicator = container.querySelector('.codex-progress-indicator') as HTMLElement | null;
     const renderSignature = buildViewRenderSignature(this, view);
 
     const session = new ViewSession({
       view,
-      mode: isReading ? 'reading' : 'live-preview',
+      mode,
       container: scroller,
       chapters,
       stepperElement,
@@ -128,7 +135,7 @@ function installTypedProductionSessions(): void {
       hierarchyMode,
       shouldTrack: () => this.isActiveMarkdownView?.(view) !== false,
       trackImmediately: false,
-      findReadingHeading: isReading && this.getReadingHeading
+      findReadingHeading: mode === 'reading' && this.getReadingHeading
         ? (chapter) => this.getReadingHeading?.(view, chapter) ?? null
         : undefined,
       onSelectChapter: (chapter) => this.jumpToHeading?.(view, chapter),

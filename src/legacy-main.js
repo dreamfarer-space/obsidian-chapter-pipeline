@@ -2373,6 +2373,20 @@ class ChapterPipelinePlugin extends Plugin {
       scrollers.forEach((scroller) => scroller.addEventListener('scroll', throttledScroll, { passive: true, capture: true }));
       this.scrollBindings.set(container, { scrollers, handler: throttledScroll });
     }
+
+    // Explicit compatibility contract for the typed production session. Keep
+    // legacy rendering internals private instead of making typed code recover
+    // the same resources through maps and DOM selectors.
+    return {
+      hostContainer: container,
+      chapters,
+      stepperElement: stepperContainer,
+      dashElements,
+      tooltipElement: floatingTooltip,
+      railIndicator,
+      trackingContainer: scrollers[0] || this.getViewScroller(container, view) || null,
+      mode: this.isReadingMode(view, container) ? 'reading' : 'live-preview'
+    };
   }
 
   isReadingMode(view, container = null) {
