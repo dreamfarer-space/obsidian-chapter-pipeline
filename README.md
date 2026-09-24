@@ -8,7 +8,7 @@ Floating heading dashes · KaTeX previews · pinned-top navigation · reading bo
 
 [![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
-[![Obsidian](https://img.shields.io/badge/Tested%20min-0.15.9-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
+[![Obsidian](https://img.shields.io/badge/Declared%20min-0.15.9-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -23,12 +23,12 @@ Chapter Pipeline turns long Obsidian notes into a compact, margin-mounted naviga
 
 It is designed for long technical notes, research documents, study material, documentation, and any workflow where you want fast chapter navigation without giving up screen space.
 
-## What's new in 1.2.2
+## What's new in 1.2.3
 
-- **Community submission hardening** — release metadata, required assets, version mappings, and production bundle consistency are validated in CI and before publishing.
-- **Final Chapter Pipeline identity** — repository, display name, plugin ID, and release packaging are aligned, while legacy runtime `Pro` debug branding is removed.
-- **Verified desktop compatibility** — the packaged plugin passed real-app smoke tests on Obsidian Desktop `0.15.9` and public stable `1.13.7`; mobile remains intentionally disabled until Android/iOS testing is completed.
-- **Clean release lineage** — `1.2.2` uses the exact manifest version as its tag and avoids the historical `v1.2.1` / `1.2.1` release collision.
+- **Obsidian review hardening** — addresses review-blocker findings and refreshes release metadata for the current `1.2.3` package.
+- **UI implementation cleanup** — moves tooltip layer styling into plugin CSS and uses Obsidian's settings component API for the settings heading.
+- **Release metadata remains aligned** — plugin ID stays `chapter-pipeline`, `minAppVersion` remains `0.15.9`, and mobile support remains intentionally disabled with `isDesktopOnly: true`.
+- **Compatibility evidence is explicit** — the latest recorded real-app smoke run remains the packaged `1.2.2` build; see the submission checklist for the exact tested matrix instead of treating that evidence as a separate `1.2.3` smoke run.
 
 See [Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases) for the full version history.
 
@@ -176,11 +176,11 @@ Architecture and implementation notes live in [`docs/`](docs/):
 - [`PHASE2_PERFORMANCE.md`](docs/PHASE2_PERFORMANCE.md) — performance work
 - [`PHASE3_COMPLIANCE_AUDIT.md`](docs/PHASE3_COMPLIANCE_AUDIT.md) — compliance and lifecycle audit
 - [`PHASE4_UI_UX.md`](docs/PHASE4_UI_UX.md) — UI/UX, motion, touch, and accessibility notes
-- [`COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) — release and compatibility checklist for Community Plugins submission
+- [`COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) — authoritative current release/platform state and compatibility evidence
 
 ## Compatibility verification
 
-`minAppVersion` is `0.15.9`, verified on 2026-09-23 by loading the packaged plugin in the official Obsidian Desktop `0.15.9` AppImage. The same smoke matrix also passed on public stable `1.13.7`. See [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) for the recorded matrix. Android/iOS support is not currently claimed.
+The current `1.2.3` manifest declares `minAppVersion: 0.15.9` and `isDesktopOnly: true`. The latest recorded real-app smoke matrix was run on the packaged `1.2.2` build on 2026-09-23 and passed on official Obsidian Desktop `0.15.9` and `1.13.7`. Release `1.2.3` retains the same declared compatibility/platform metadata but contains review/UI implementation changes, so the recorded `1.2.2` smoke run is not represented as a separate `1.2.3` real-app test. See [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) for the exact evidence. Android/iOS support is not currently claimed.
 
 ## Privacy
 
