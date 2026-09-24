@@ -140,10 +140,19 @@ function createProductionReuseHarness() {
   return {
     getCachedReads: () => cachedReads,
     plugin,
+    ProductionPlugin,
     scroller,
     stepper,
     view,
   };
+}
+
+function seedSession(harness, session) {
+  const coordinator = new harness.ProductionPlugin.SessionCoordinator();
+  const generation = coordinator.begin(harness.view);
+  assert.equal(coordinator.adopt(harness.view, generation, session), true);
+  harness.plugin.sessionCoordinator = coordinator;
+  return coordinator;
 }
 
 test('layout/active-leaf refreshes keep the same render signature when inputs are unchanged', () => {
@@ -196,6 +205,26 @@ test('session reuse requires identical signature, stepper, and tracking scroller
   assert.equal(canReuseRenderedSession(undefined, 'same', stepper, scroller), false);
 });
 
+test('session coordinator rejects stale async adoption and disposes the stale session', () => {
+  const { ProductionPlugin } = loadProductionPlugin();
+  const coordinator = new ProductionPlugin.SessionCoordinator();
+  const view = {};
+  let staleDisposed = 0;
+  let currentDisposed = 0;
+
+  const staleGeneration = coordinator.begin(view);
+  const currentGeneration = coordinator.begin(view);
+  assert.equal(coordinator.adopt(view, staleGeneration, { dispose() { staleDisposed += 1; } }), false);
+  const currentSession = { dispose() { currentDisposed += 1; } };
+  assert.equal(coordinator.adopt(view, currentGeneration, currentSession), true);
+  assert.equal(coordinator.get(view), currentSession);
+  assert.equal(staleDisposed, 1);
+
+  coordinator.detach(view);
+  assert.equal(currentDisposed, 1);
+  assert.equal(coordinator.get(view), undefined);
+});
+
 test('production updateAllMarkdownViews preserves an unchanged mounted session and skips cachedRead', () => {
   const { buildViewRenderSignature } = loadRenderSignatureModule();
   const harness = createProductionReuseHarness();
@@ -206,13 +235,12 @@ test('production updateAllMarkdownViews preserves an unchanged mounted session a
     trackingContainer: harness.scroller,
     dispose() { disposed += 1; },
   };
-  harness.plugin.viewSessions = new Map([[harness.view, session]]);
-  harness.plugin.viewSessionVersions = new Map([[harness.view, 1]]);
+  const coordinator = seedSession(harness, session);
 
   harness.plugin.updateAllMarkdownViews();
   harness.plugin.updateAllMarkdownViews();
 
-  assert.equal(harness.plugin.viewSessions.get(harness.view), session);
+  assert.equal(coordinator.get(harness.view), session);
   assert.equal(disposed, 0);
   assert.equal(harness.getCachedReads(), 0, 'unchanged workspace refreshes must not re-read and rebuild the note');
 });
@@ -229,8 +257,7 @@ test('production updateAllMarkdownViews invalidates reuse when the tracking scro
     trackingContainer: {},
     dispose() { disposed += 1; },
   };
-  harness.plugin.viewSessions = new Map([[harness.view, session]]);
-  harness.plugin.viewSessionVersions = new Map([[harness.view, 1]]);
+  seedSession(harness, session);
 
   harness.plugin.updateAllMarkdownViews();
   await Promise.resolve();
@@ -251,8 +278,7 @@ test('production updateAllMarkdownViews invalidates a session after a structural
     trackingContainer: harness.scroller,
     dispose() { disposed += 1; },
   };
-  harness.plugin.viewSessions = new Map([[harness.view, session]]);
-  harness.plugin.viewSessionVersions = new Map([[harness.view, 1]]);
+  seedSession(harness, session);
 
   harness.plugin.settings.showProgressRail = true;
   harness.plugin.updateAllMarkdownViews();
