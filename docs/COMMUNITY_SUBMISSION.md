@@ -36,9 +36,11 @@ Mobile support can be enabled later by setting `isDesktopOnly: false` only after
 
 ## Obsidian review lint
 
-Run `npm run lint:obsidian` before submission. The command runs the current Obsidian-specific ESLint rules against production source and `manifest.json` using an isolated, pinned review toolchain. The isolation is intentional: Chapter Pipeline currently builds with TypeScript 7, while the current `typescript-eslint` release used by the Obsidian lint ecosystem supports TypeScript versions below 6.1.
+Run `npm run lint:obsidian` before submission. The command runs the current Obsidian-specific ESLint rules against production source using an isolated, pinned review toolchain. The isolation is intentional: Chapter Pipeline currently builds with TypeScript 7, while the current `typescript-eslint` release used by the Obsidian lint ecosystem supports TypeScript versions below 6.1.
 
-The lint runner follows the Community Plugin scanner's source-oriented ignore model for generated bundles, tests, build scripts, documentation, localization, and vault fixtures. Blocking lint errors fail the command and therefore fail CI. Rule suppressions should stay narrow and include a reason at the use site rather than disabling review rules globally.
+The lint runner follows the Community Plugin scanner's documented source-oriented ignore model and severity policy: generated bundles, tests, build scripts, documentation, localization, and vault fixtures are excluded; most code-quality findings remain advisory warnings; security-critical findings stay blocking errors; and scanner-disabled high-noise rules remain disabled. Blocking lint errors fail the command and therefore fail CI. Rule suppressions should stay narrow and include a reason at the use site rather than disabling Obsidian review rules globally.
+
+Release metadata remains covered separately by `scripts/validate-release.mjs` and the existing release checks below.
 
 ## Pre-submission release checks
 
