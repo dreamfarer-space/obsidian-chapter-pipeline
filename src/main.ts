@@ -21,12 +21,6 @@ import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './u
 import { applyRuntimePerformancePatches } from './runtime-performance';
 import type { ChapterNode } from './types';
 
-interface LegacyScrollBinding {
-  scrollers?: Array<{ removeEventListener?: (...args: unknown[]) => void }>;
-  scroller?: { removeEventListener?: (...args: unknown[]) => void };
-  handler?: (...args: unknown[]) => void;
-}
-
 interface LegacyRenderResult {
   hostContainer: HTMLElement;
   chapters: ChapterNode[];
@@ -35,13 +29,13 @@ interface LegacyRenderResult {
   tooltipElement: HTMLElement | null;
   railIndicator: HTMLElement | null;
   trackingContainer: HTMLElement | null;
+  releaseLegacyScrollTracking: () => void;
   mode: 'reading' | 'live-preview';
 }
 
 interface ProductionPlugin {
   settings?: Record<string, unknown>;
   soundEngine?: { playScrollTick?: (volume: number) => void };
-  scrollBindings?: Map<unknown, LegacyScrollBinding>;
   sessionCoordinator?: SessionCoordinator<object, ViewSession>;
   fileChapterSnapshots?: Map<string, ChapterNode[]>;
   app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
@@ -70,17 +64,6 @@ installReadingIdentityPersistence(LegacyPlugin as never);
 function getSessionCoordinator(plugin: ProductionPlugin): SessionCoordinator<object, ViewSession> {
   plugin.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>();
   return plugin.sessionCoordinator;
-}
-
-/** Remove the compatibility renderer's scroll listener before typed tracking takes ownership. */
-function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {
-  const binding = plugin.scrollBindings?.get(container);
-  if (!binding) return;
-  const scrollers = binding.scrollers ?? (binding.scroller ? [binding.scroller] : []);
-  if (binding.handler) {
-    scrollers.forEach((scroller) => scroller?.removeEventListener?.('scroll', binding.handler, true));
-  }
-  plugin.scrollBindings?.delete(container);
 }
 
 /** Install typed per-view session ownership onto the legacy coordinator exactly once. */
@@ -114,11 +97,12 @@ function installTypedProductionSessions(): void {
       tooltipElement,
       railIndicator,
       trackingContainer: scroller,
+      releaseLegacyScrollTracking,
       mode
     } = rendered;
     if (!chapters.length || !scroller) return;
 
-    removeLegacyScrollBinding(this, container);
+    releaseLegacyScrollTracking();
 
     const hierarchyMode = (this.settings?.hierarchyMode ?? 'all') as 'all' | 'hover-expand' | 'active-branch';
     const renderSignature = buildViewRenderSignature(this, view);
