@@ -115,6 +115,7 @@ function installTypedProductionSessions(): void {
       stepperElement,
       dashElements,
       tooltipElement,
+      progressIndicator: railIndicator,
       renderSignature,
       hierarchyMode,
       shouldTrack: () => this.isActiveMarkdownView?.(view) !== false,
@@ -125,24 +126,6 @@ function installTypedProductionSessions(): void {
         : undefined,
       onSelectChapter: (chapter) => this.jumpToHeading?.(view, chapter),
       onActiveChapter: (index, previousIndex) => {
-        dashElements.forEach((element, elementIndex) => {
-          if (elementIndex === index) element.classList.add('active');
-          else element.classList.remove('active');
-        });
-
-        if (railIndicator) {
-          if (chapters.length <= 1) {
-            railIndicator.style.height = '100%';
-          } else {
-            const activeItem = dashElements[index];
-            const offsetTop = Number((activeItem as HTMLElement & { offsetTop?: number })?.offsetTop) || 0;
-            const offsetHeight = Number((activeItem as HTMLElement & { offsetHeight?: number })?.offsetHeight) || 10;
-            railIndicator.style.height = offsetTop > 0
-              ? `${offsetTop + (offsetHeight / 2)}px`
-              : `${Math.round((index / (chapters.length - 1)) * 100)}%`;
-          }
-        }
-
         if (previousIndex >= 0 && previousIndex !== index) {
           const volume = typeof this.settings?.soundVolume === 'number' ? this.settings.soundVolume : 50;
           this.soundEngine?.playScrollTick?.(volume);
