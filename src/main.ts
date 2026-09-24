@@ -43,7 +43,9 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
   sessionCoordinator?: SessionCoordinator<object, ViewSession>;
 
   private getSessionCoordinator(): SessionCoordinator<object, ViewSession> {
-    this.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>();
+    this.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>((view) => {
+      this.disconnectReadingHeadingObserver(view);
+    });
     return this.sessionCoordinator;
   }
 
@@ -79,7 +81,8 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
     const hierarchyMode = (this.settings?.hierarchyMode ?? 'all') as 'all' | 'hover-expand' | 'active-branch';
     const renderSignature = buildViewRenderSignature(this, view);
 
-    const session = new ViewSession({
+    let session!: ViewSession;
+    session = new ViewSession({
       view,
       mode,
       container: scroller,
@@ -93,6 +96,11 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
       shouldTrack: () => this.isActiveMarkdownView?.(view) !== false,
       trackImmediately: false,
       isCurrentMount,
+      onDispose: () => {
+        if (!coordinator.get(view) || coordinator.get(view) === session) {
+          this.disconnectReadingHeadingObserver(view);
+        }
+      },
       findReadingHeading: mode === 'reading' && this.getReadingHeading
         ? (chapter) => this.getReadingHeading?.(view, chapter) ?? null
         : undefined,

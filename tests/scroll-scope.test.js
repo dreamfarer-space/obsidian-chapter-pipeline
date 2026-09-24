@@ -202,3 +202,76 @@ test('jumpToHeading stops stale or disconnected calibratePreview loops before mu
   assert.equal(frames.length, 0, 'disconnected previewScroller must not schedule another frame');
 });
 
+test('getReadingHeading skips signature check when MutationObserver exists and disconnects observer on view detach', () => {
+  const previousMutationObserver = global.MutationObserver;
+  let disconnectedCount = 0;
+  let observerInstance = null;
+
+  global.MutationObserver = class FakeObserver {
+    constructor(cb) {
+      this.cb = cb;
+      observerInstance = this;
+    }
+    observe() {}
+    disconnect() {
+      disconnectedCount += 1;
+    }
+  };
+
+  try {
+    const heading = {
+      tagName: 'H2',
+      textContent: 'Observed Heading',
+      isConnected: true,
+      classList: { contains() { return false; } },
+      getAttribute(name) {
+        if (name === 'data-line') return '0';
+        if (name === 'data-heading') return 'Observed Heading';
+        return null;
+      },
+      closest() { return null; },
+    };
+
+    const scroller = {
+      addEventListener() {},
+      get children() {
+        throw new Error('getScrollerChildSignature must be skipped when observerState.observer exists');
+      },
+      querySelectorAll(selector) {
+        return selector === 'h1, h2, h3, h4, h5, h6' ? [heading] : [];
+      },
+      querySelector() { return null; },
+    };
+    const view = {
+      contentEl: {
+        querySelector(selector) {
+          return selector === '.markdown-preview-view' ? scroller : null;
+        },
+      },
+    };
+
+    const plugin = new ChapterPipelinePlugin();
+    const resolved = plugin.getReadingHeading(view, {
+      title: 'Observed Heading',
+      rawHeading: 'Observed Heading',
+      level: 2,
+      line: 0,
+      headingIndex: 0,
+    });
+    assert.equal(resolved, heading);
+    assert.ok(observerInstance, 'MutationObserver should be created for scroller');
+    assert.equal(plugin.readingHeadingObservers.has(scroller), true);
+    assert.equal(plugin.readingHeadingSnapshots.has(scroller), true);
+
+    const coordinator = plugin.getSessionCoordinator();
+    coordinator.detach(view);
+
+    assert.equal(disconnectedCount, 1, 'coordinator.detach(view) must disconnect the scroller MutationObserver');
+    assert.equal(plugin.readingHeadingObservers.has(scroller), false);
+    assert.equal(plugin.readingHeadingSnapshots.has(scroller), false);
+  } finally {
+    global.MutationObserver = previousMutationObserver;
+  }
+});
+
+

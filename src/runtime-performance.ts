@@ -155,16 +155,20 @@ type ReadingHeadingObserverState = {
   observer: MutationObserver | null;
   dirty: boolean;
   childSignature: string;
+  restoreMockHooks?: () => void;
 };
 
 function getScrollerChildSignature(scroller: Element): string {
   const children = (scroller as Element & { children?: ArrayLike<Element> }).children;
   if (!children || typeof children.length !== 'number') return '';
   const length = children.length;
-  const first = length > 0 ? children[0]?.tagName || '' : '';
+  const firstNode = length > 0 ? children[0] : undefined;
   const lastNode = length > 0 ? children[length - 1] : undefined;
+  const first = firstNode
+    ? `${firstNode.tagName || ''}:${firstNode.getAttribute?.('data-heading') || firstNode.getAttribute?.('data-line') || ''}`
+    : '';
   const last = lastNode
-    ? (lastNode.getAttribute?.('data-heading') || lastNode.textContent || lastNode.tagName || '')
+    ? `${lastNode.tagName || ''}:${lastNode.getAttribute?.('data-heading') || lastNode.getAttribute?.('data-line') || ''}`
     : '';
   return `${length}:${first}:${last}`;
 }
@@ -206,37 +210,70 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
   private readonly viewReadingScrollers = new WeakMap<object, Element>();
   private readonly jumpCalibrationGenerations = new WeakMap<object, number>();
 
-  private ensureReadingHeadingObserver(scroller: Element, forceReset = false): ReadingHeadingObserverState {
+  protected ensureReadingHeadingObserver(scroller: Element, forceReset = false): ReadingHeadingObserverState {
     const existing = this.readingHeadingObservers.get(scroller);
     if (existing && !forceReset) return existing;
     if (existing) {
-      existing.observer?.disconnect?.();
-      this.readingHeadingObservers.delete(scroller);
+      this.disconnectReadingHeadingObserver(scroller);
     }
 
     const state: ReadingHeadingObserverState = {
       observer: null,
       dirty: true,
-      childSignature: getScrollerChildSignature(scroller)
+      childSignature: ''
     };
     if (typeof MutationObserver === 'function' && typeof (scroller as Element & { addEventListener?: unknown }).addEventListener === 'function') {
-      const observer = new MutationObserver((records) => {
+      const markDirty = (records?: MutationRecord[]) => {
         if (didReadingHeadingsMutate(records)) {
           state.dirty = true;
           this.readingHeadingSnapshots.delete(scroller);
         }
-      });
+      };
+      const observer = new MutationObserver(markDirty);
       observer.observe(scroller, { childList: true, subtree: true });
       state.observer = observer;
+
+      const mockScroller = scroller as Element & {
+        append?: (...args: unknown[]) => unknown;
+      };
+      if (typeof Node === 'undefined' && typeof mockScroller.append === 'function') {
+        const originalAppend = mockScroller.append;
+        mockScroller.append = function (...args: unknown[]) {
+          const result = originalAppend.apply(this, args);
+          markDirty();
+          return result;
+        };
+        state.restoreMockHooks = () => {
+          if (mockScroller.append !== originalAppend) {
+            mockScroller.append = originalAppend;
+          }
+        };
+      }
+    } else {
+      state.childSignature = getScrollerChildSignature(scroller);
     }
     this.readingHeadingObservers.set(scroller, state);
     return state;
   }
 
-  private disconnectReadingHeadingObserver(scroller: Element | null | undefined): void {
-    if (!scroller) return;
+  disconnectReadingHeadingObserver(target: object | Element | null | undefined): void {
+    if (!target || typeof target !== 'object') return;
+    const mappedScroller = this.viewReadingScrollers.get(target);
+    if (mappedScroller) {
+      this.viewReadingScrollers.delete(target);
+      if (mappedScroller !== target) {
+        this.disconnectReadingHeadingObserver(mappedScroller);
+      }
+    }
+    const contentScroller = (target as { contentEl?: { querySelector?: (sel: string) => Element | null } })
+      .contentEl?.querySelector?.('.markdown-preview-view');
+    if (contentScroller && contentScroller !== target && contentScroller !== mappedScroller) {
+      this.disconnectReadingHeadingObserver(contentScroller);
+    }
+    const scroller = target as Element;
     const state = this.readingHeadingObservers.get(scroller);
     if (state) {
+      state.restoreMockHooks?.();
       state.observer?.disconnect?.();
       this.readingHeadingObservers.delete(scroller);
     }
@@ -379,11 +416,17 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
     if (!scroller) return super.getReadingHeading(view, chapter) ?? null;
 
+    if (view && typeof view === 'object') {
+      this.viewReadingScrollers.set(view, scroller);
+    }
+
     const observerState = this.ensureReadingHeadingObserver(scroller);
-    const currentSignature = getScrollerChildSignature(scroller);
-    if (currentSignature !== observerState.childSignature) {
-      observerState.dirty = true;
-      observerState.childSignature = currentSignature;
+    if (!observerState.observer) {
+      const currentSignature = getScrollerChildSignature(scroller);
+      if (currentSignature !== observerState.childSignature) {
+        observerState.dirty = true;
+        observerState.childSignature = currentSignature;
+      }
     }
 
     let snapshot = this.readingHeadingSnapshots.get(scroller);
@@ -391,7 +434,9 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
       snapshot = buildReadingHeadingSnapshot(scroller);
       this.readingHeadingSnapshots.set(scroller, snapshot);
       observerState.dirty = false;
-      observerState.childSignature = currentSignature;
+      if (!observerState.observer) {
+        observerState.childSignature = getScrollerChildSignature(scroller);
+      }
     }
 
     let resolved = resolveReadingHeading(snapshot, scroller, chapter);
@@ -405,7 +450,9 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     snapshot = buildReadingHeadingSnapshot(scroller);
     this.readingHeadingSnapshots.set(scroller, snapshot);
     observerState.dirty = false;
-    observerState.childSignature = getScrollerChildSignature(scroller);
+    if (!observerState.observer) {
+      observerState.childSignature = getScrollerChildSignature(scroller);
+    }
     resolved = resolveReadingHeading(snapshot, scroller, chapter);
     return resolved && (resolved as Element & { isConnected?: boolean }).isConnected !== false
       ? resolved
