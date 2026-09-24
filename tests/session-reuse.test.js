@@ -284,3 +284,33 @@ test('production updateAllMarkdownViews invalidates a session after a structural
   assert.equal(disposed, 1);
   assert.equal(harness.getCachedReads(), 1, 'structural changes must route through the rebuild path');
 });
+
+test('buildViewRenderSignature and updateAllMarkdownViews safely handle deferred views without file', async () => {
+  const { buildViewRenderSignature } = loadRenderSignatureModule();
+  const harness = createProductionReuseHarness();
+  global.MutationObserver = class MutationObserver { observe() {} disconnect() {} };
+
+  harness.plugin.app.metadataCache.getFileCache = (targetFile) => {
+    if (!targetFile || typeof targetFile.path !== 'string') {
+      throw new TypeError("Cannot read properties of undefined (reading 'path')");
+    }
+    return { headings: [] };
+  };
+
+  const deferredView = { contentEl: {} };
+  assert.doesNotThrow(() => buildViewRenderSignature(harness.plugin, deferredView));
+
+  const extracted = harness.plugin.extractChapters('# Heading 1\n\nBody\n\n## Heading 2', undefined);
+  assert.equal(extracted.length, 2, 'extractChapters must fall back to markdown headings without calling getFileCache(undefined)');
+  assert.deepEqual(extracted.map((chapter) => chapter.title), ['Heading 1', 'Heading 2']);
+
+  harness.plugin.app.workspace.getLeavesOfType = () => [
+    { isDeferred: true, view: deferredView },
+    { isDeferred: false, view: harness.view },
+  ];
+
+  assert.doesNotThrow(() => harness.plugin.updateAllMarkdownViews());
+  await Promise.resolve();
+  assert.equal(harness.getCachedReads(), 1, 'deferred tab without file must not abort subsequent active note attachment');
+});
+

@@ -159,13 +159,18 @@ class TypedProductionPlugin extends LegacyPlugin {
     const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];
     const mountedViews = new Set<object>();
     leaves.forEach((leaf) => {
-      if (leaf?.view && typeof leaf.view === 'object') mountedViews.add(leaf.view);
+      const view = leaf?.view as { file?: { path?: unknown } } | undefined;
+      if (view && typeof view === 'object' && view.file && typeof view.file === 'object' && typeof view.file.path === 'string') {
+        mountedViews.add(view);
+      }
     });
     coordinator.disposeUnmounted(mountedViews);
 
     leaves.forEach((leaf) => {
-      const view = leaf?.view;
-      if (!view || typeof view !== 'object') return;
+      const view = leaf?.view as { file?: { path?: unknown } } | undefined;
+      if (!view || typeof view !== 'object' || !view.file || typeof view.file !== 'object' || typeof view.file.path !== 'string') {
+        return;
+      }
       const renderSignature = buildViewRenderSignature(this, view);
       if (canReuseRenderedSession(coordinator.get(view), renderSignature)) return;
       void this.attachStepperToView(view);
