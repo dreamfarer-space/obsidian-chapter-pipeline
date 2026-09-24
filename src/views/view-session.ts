@@ -84,6 +84,8 @@ export interface ViewSessionOptions {
   shouldTrack?: () => boolean;
   /** Disable the first geometry pass when adopting UI already initialized by a compatibility renderer. */
   trackImmediately?: boolean;
+  /** Validate that the adopted DOM/scroller resources are still the mounted resources for this view. */
+  isCurrentMount?: () => boolean;
 }
 
 /**
@@ -166,6 +168,12 @@ export class ViewSession {
   /** Return the currently active chapter index, or -1 before the first update. */
   getActiveIndex(): number {
     return this.activeIndex;
+  }
+
+  /** Return false when the adopted legacy render resources were replaced or the view mode changed. */
+  isCurrentMount(): boolean {
+    if (this.disposed) return false;
+    return this.options.isCurrentMount?.() ?? true;
   }
 
   /** Release the tracker, UI adapters, and chapter snapshot for this view. */

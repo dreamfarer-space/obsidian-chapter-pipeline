@@ -2374,6 +2374,9 @@ class ChapterPipelinePlugin extends Plugin {
       this.scrollBindings.set(container, { scrollers, handler: throttledScroll });
     }
 
+    const trackingContainer = scrollers[0] || this.getViewScroller(container, view) || null;
+    const mode = this.isReadingMode(view, container) ? 'reading' : 'live-preview';
+
     // Explicit compatibility contract for the typed production session. Keep
     // legacy rendering internals private instead of making typed code recover
     // the same resources through maps and DOM selectors.
@@ -2384,13 +2387,23 @@ class ChapterPipelinePlugin extends Plugin {
       dashElements,
       tooltipElement: floatingTooltip,
       railIndicator,
-      trackingContainer: scrollers[0] || this.getViewScroller(container, view) || null,
+      trackingContainer,
       releaseLegacyScrollTracking: () => {
         scrollers.forEach((scroller) => scroller?.removeEventListener?.('scroll', throttledScroll, true));
         const currentBinding = this.scrollBindings.get(container);
         if (currentBinding?.handler === throttledScroll) this.scrollBindings.delete(container);
       },
-      mode: this.isReadingMode(view, container) ? 'reading' : 'live-preview'
+      isCurrentMount: () => {
+        if (view?.contentEl !== container) return false;
+        if (container.querySelector('.codex-stepper-container') !== stepperContainer) return false;
+        const currentMode = this.isReadingMode(view, container) ? 'reading' : 'live-preview';
+        if (currentMode !== mode) return false;
+        const currentTrackingContainer = currentMode === 'reading'
+          ? this.getViewScroller(container, view) || container.querySelector('.markdown-preview-view')
+          : this.getViewScroller(container, view) || container.querySelector('.cm-scroller');
+        return currentTrackingContainer === trackingContainer;
+      },
+      mode
     };
   }
 

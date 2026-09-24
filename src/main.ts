@@ -30,6 +30,7 @@ interface LegacyRenderResult {
   railIndicator: HTMLElement | null;
   trackingContainer: HTMLElement | null;
   releaseLegacyScrollTracking: () => void;
+  isCurrentMount: () => boolean;
   mode: 'reading' | 'live-preview';
 }
 
@@ -40,9 +41,7 @@ interface ProductionPlugin {
   fileChapterSnapshots?: Map<string, ChapterNode[]>;
   app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
   getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
-  getViewScroller?: (container: HTMLElement, view: object) => HTMLElement | null;
   isActiveMarkdownView?: (view: object) => boolean;
-  isReadingMode?: (view: object, container?: HTMLElement | null) => boolean;
   jumpToHeading?: (view: object, chapter: ChapterNode) => void;
   recordReadingPosition?: (view: object, chapter: ChapterNode) => void;
 }
@@ -98,6 +97,7 @@ function installTypedProductionSessions(): void {
       railIndicator,
       trackingContainer: scroller,
       releaseLegacyScrollTracking,
+      isCurrentMount,
       mode
     } = rendered;
     if (!chapters.length || !scroller) return;
@@ -119,6 +119,7 @@ function installTypedProductionSessions(): void {
       hierarchyMode,
       shouldTrack: () => this.isActiveMarkdownView?.(view) !== false,
       trackImmediately: false,
+      isCurrentMount,
       findReadingHeading: mode === 'reading' && this.getReadingHeading
         ? (chapter) => this.getReadingHeading?.(view, chapter) ?? null
         : undefined,
@@ -176,22 +177,8 @@ function installTypedProductionSessions(): void {
       leaves.forEach((leaf) => {
         const view = leaf?.view;
         if (!view || typeof view !== 'object') return;
-        const typedView = view as { contentEl?: HTMLElement };
-        const container = typedView.contentEl;
-        const mountedStepper = container?.querySelector('.codex-stepper-container') as HTMLElement | null;
-        const isReading = container ? this.isReadingMode?.(view, container) === true : false;
-        const mountedTrackingContainer = container
-          ? (isReading
-            ? this.getViewScroller?.(container, view) ?? (container.querySelector('.markdown-preview-view') as HTMLElement | null)
-            : this.getViewScroller?.(container, view) ?? (container.querySelector('.cm-scroller') as HTMLElement | null))
-          : null;
         const renderSignature = buildViewRenderSignature(this, view);
-        if (canReuseRenderedSession(
-          coordinator.get(view),
-          renderSignature,
-          mountedStepper,
-          mountedTrackingContainer
-        )) return;
+        if (canReuseRenderedSession(coordinator.get(view), renderSignature)) return;
         void prototype.attachStepperToView?.call(this, view);
       });
     };
