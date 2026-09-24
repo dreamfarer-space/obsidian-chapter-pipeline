@@ -1,0 +1,103 @@
+name: Temporary stepper active UI refactor
+
+on:
+  push:
+    branches: [refactor/issue-32-stepper-active-ui]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-build-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: refactor/issue-32-stepper-active-ui
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - name: Move active classes and progress rail into StepperView
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path_str, old, new):
+              path = Path(path_str)
+              text = path.read_text()
+              if old in text:
+                  path.write_text(text.replace(old, new, 1))
+                  return
+              if new not in text:
+                  raise SystemExit(f'expected patch context not found in {path_str}')
+
+          replace_once(
+              'src/ui/stepper.ts',
+              '''  existingElement?: HTMLElement;\n  existingDashes?: HTMLElement[];\n}\n''',
+              '''  existingElement?: HTMLElement;\n  existingDashes?: HTMLElement[];\n  existingProgressIndicator?: HTMLElement | null;\n}\n'''
+          )
+          replace_once(
+              'src/ui/stepper.ts',
+              '''  private readonly dashElements: HTMLElement[] = [];\n  private readonly adopted: boolean;\n''',
+              '''  private readonly dashElements: HTMLElement[] = [];\n  private readonly progressIndicator: HTMLElement | null;\n  private readonly adopted: boolean;\n'''
+          )
+          replace_once(
+              'src/ui/stepper.ts',
+              '''    this.adopted = Boolean(options.existingElement);\n    this.hierarchyMode = options.hierarchyMode ?? 'all';\n    this.element = options.existingElement ?? document.createElement('nav');\n''',
+              '''    this.adopted = Boolean(options.existingElement);\n    this.hierarchyMode = options.hierarchyMode ?? 'all';\n    this.element = options.existingElement ?? document.createElement('nav');\n    this.progressIndicator = options.existingProgressIndicator ?? null;\n'''
+          )
+          replace_once(
+              'src/ui/stepper.ts',
+              '''  setActive(index: number, mode: HierarchyMode = 'all'): void {\n    this.activeIndex = index;\n    if (this.hierarchyMode !== mode) {\n      this.hierarchyMode = mode;\n      this.keyboardExpanded = false;\n      this.pointerExpanded = false;\n    }\n    this.syncHierarchy();\n  }\n\n  private syncHierarchy(): void {\n''',
+              '''  setActive(index: number, mode: HierarchyMode = 'all'): void {\n    this.activeIndex = index;\n    this.dashElements.forEach((element, elementIndex) => {\n      if (elementIndex === index) element.classList.add('active');\n      else element.classList.remove('active');\n    });\n    this.syncProgress();\n    if (this.hierarchyMode !== mode) {\n      this.hierarchyMode = mode;\n      this.keyboardExpanded = false;\n      this.pointerExpanded = false;\n    }\n    this.syncHierarchy();\n  }\n\n  private syncProgress(): void {\n    if (!this.progressIndicator) return;\n    if (this.options.chapters.length <= 1) {\n      this.progressIndicator.style.height = '100%';\n      return;\n    }\n    if (this.activeIndex < 0 || this.activeIndex >= this.options.chapters.length) {\n      this.progressIndicator.style.height = '0%';\n      return;\n    }\n\n    const activeItem = this.dashElements[this.activeIndex];\n    const offsetTop = Number(activeItem?.offsetTop) || 0;\n    const offsetHeight = Number(activeItem?.offsetHeight) || 10;\n    this.progressIndicator.style.height = offsetTop > 0\n      ? `${offsetTop + (offsetHeight / 2)}px`\n      : `${Math.round((this.activeIndex / (this.options.chapters.length - 1)) * 100)}%`;\n  }\n\n  private syncHierarchy(): void {\n'''
+          )
+
+          replace_once(
+              'src/views/view-session.ts',
+              '''  tooltipElement?: HTMLElement | null;\n  renderSignature?: string;\n''',
+              '''  tooltipElement?: HTMLElement | null;\n  progressIndicator?: HTMLElement | null;\n  renderSignature?: string;\n'''
+          )
+          replace_once(
+              'src/views/view-session.ts',
+              '''      existingElement: options.stepperElement,\n      existingDashes: options.dashElements,\n    });\n''',
+              '''      existingElement: options.stepperElement,\n      existingDashes: options.dashElements,\n      existingProgressIndicator: options.progressIndicator,\n    });\n'''
+          )
+
+          replace_once(
+              'src/main.ts',
+              '''      tooltipElement,\n      renderSignature,\n''',
+              '''      tooltipElement,\n      progressIndicator: railIndicator,\n      renderSignature,\n'''
+          )
+          replace_once(
+              'src/main.ts',
+              '''      onActiveChapter: (index, previousIndex) => {\n        dashElements.forEach((element, elementIndex) => {\n          if (elementIndex === index) element.classList.add('active');\n          else element.classList.remove('active');\n        });\n\n        if (railIndicator) {\n          if (chapters.length <= 1) {\n            railIndicator.style.height = '100%';\n          } else {\n            const activeItem = dashElements[index];\n            const offsetTop = Number((activeItem as HTMLElement & { offsetTop?: number })?.offsetTop) || 0;\n            const offsetHeight = Number((activeItem as HTMLElement & { offsetHeight?: number })?.offsetHeight) || 10;\n            railIndicator.style.height = offsetTop > 0\n              ? `${offsetTop + (offsetHeight / 2)}px`\n              : `${Math.round((index / (chapters.length - 1)) * 100)}%`;\n          }\n        }\n\n        if (previousIndex >= 0 && previousIndex !== index) {\n''',
+              '''      onActiveChapter: (index, previousIndex) => {\n        if (previousIndex >= 0 && previousIndex !== index) {\n'''
+          )
+
+          replace_once(
+              'tests/stepper-accessibility.test.js',
+              '''    this.parentElement = null;\n    this.removed = false;\n''',
+              '''    this.parentElement = null;\n    this.removed = false;\n    this.style = {};\n    this.offsetTop = 0;\n    this.offsetHeight = 0;\n'''
+          )
+          path = Path('tests/stepper-accessibility.test.js')
+          text = path.read_text()
+          addition = '''\n\ntest('adopted stepper owns active classes and progress indicator state', () => {\n  const { StepperView } = loadStepperModule();\n  const root = new FakeElement();\n  const dashes = [new FakeElement(), new FakeElement(), new FakeElement()];\n  dashes.forEach((dash) => root.append(dash));\n  dashes[1].offsetTop = 30;\n  dashes[1].offsetHeight = 10;\n  const progressIndicator = new FakeElement();\n\n  const stepper = new StepperView({\n    container: new FakeElement(),\n    chapters: [chapter('H1', 1, 0), chapter('H2', 2, 1), chapter('H2b', 2, 2)],\n    onSelect() {},\n    hierarchyMode: 'all',\n    existingElement: root,\n    existingDashes: dashes,\n    existingProgressIndicator: progressIndicator,\n  });\n\n  stepper.setActive(1, 'all');\n  assert.equal(dashes[0].classList.contains('active'), false);\n  assert.equal(dashes[1].classList.contains('active'), true);\n  assert.equal(dashes[2].classList.contains('active'), false);\n  assert.equal(progressIndicator.style.height, '35px');\n\n  stepper.setActive(2, 'all');\n  assert.equal(dashes[1].classList.contains('active'), false);\n  assert.equal(dashes[2].classList.contains('active'), true);\n  assert.equal(progressIndicator.style.height, '100%');\n\n  stepper.dispose();\n});\n'''
+          if "test('adopted stepper owns active classes and progress indicator state'" not in text:
+              path.write_text(text + addition)
+          PY
+      - run: npm ci
+      - run: npx --no-install tsc --noEmit
+      - run: npm run build
+      - run: npm test
+      - name: Commit source, tests, and generated bundle
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/ui/stepper.ts src/views/view-session.ts src/main.ts tests/stepper-accessibility.test.js main.js
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "refactor: let typed stepper own active UI state"
+          git push origin HEAD:refactor/issue-32-stepper-active-ui
