@@ -98,6 +98,7 @@ export interface StepperOptions {
   /** Existing production DOM to adopt during the legacy-to-typed migration. */
   existingElement?: HTMLElement;
   existingDashes?: HTMLElement[];
+  existingProgressIndicator?: HTMLElement | null;
 }
 
 /** Minimal DOM builder used by the main plugin and embedders. */
@@ -105,6 +106,7 @@ export class StepperView {
   readonly element: HTMLElement;
   private readonly options: StepperOptions;
   private readonly dashElements: HTMLElement[] = [];
+  private readonly progressIndicator: HTMLElement | null;
   private readonly adopted: boolean;
   private activeIndex = -1;
   private hierarchyMode: HierarchyMode;
@@ -144,6 +146,7 @@ export class StepperView {
     this.adopted = Boolean(options.existingElement);
     this.hierarchyMode = options.hierarchyMode ?? 'all';
     this.element = options.existingElement ?? document.createElement('nav');
+    this.progressIndicator = options.existingProgressIndicator ?? null;
 
     if (this.adopted) {
       this.dashElements.push(...(options.existingDashes ?? []));
@@ -177,12 +180,36 @@ export class StepperView {
 
   setActive(index: number, mode: HierarchyMode = 'all'): void {
     this.activeIndex = index;
+    this.dashElements.forEach((element, elementIndex) => {
+      if (elementIndex === index) element.classList.add('active');
+      else element.classList.remove('active');
+    });
+    this.syncProgress();
     if (this.hierarchyMode !== mode) {
       this.hierarchyMode = mode;
       this.keyboardExpanded = false;
       this.pointerExpanded = false;
     }
     this.syncHierarchy();
+  }
+
+  private syncProgress(): void {
+    if (!this.progressIndicator) return;
+    if (this.options.chapters.length <= 1) {
+      this.progressIndicator.style.height = '100%';
+      return;
+    }
+    if (this.activeIndex < 0 || this.activeIndex >= this.options.chapters.length) {
+      this.progressIndicator.style.height = '0%';
+      return;
+    }
+
+    const activeItem = this.dashElements[this.activeIndex];
+    const offsetTop = Number(activeItem?.offsetTop) || 0;
+    const offsetHeight = Number(activeItem?.offsetHeight) || 10;
+    this.progressIndicator.style.height = offsetTop > 0
+      ? `${offsetTop + (offsetHeight / 2)}px`
+      : `${Math.round((this.activeIndex / (this.options.chapters.length - 1)) * 100)}%`;
   }
 
   private syncHierarchy(): void {

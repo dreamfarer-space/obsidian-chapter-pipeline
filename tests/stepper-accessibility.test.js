@@ -48,6 +48,9 @@ class FakeElement {
     this.children = [];
     this.parentElement = null;
     this.removed = false;
+    this.style = {};
+    this.offsetTop = 0;
+    this.offsetHeight = 0;
   }
 
   setAttribute(name, value) {
@@ -210,6 +213,40 @@ test('non-Focus hierarchy modes do not add an extra rail tab stop', () => {
   assert.equal(root.getAttribute('aria-expanded'), null);
   assert.equal(dashes[1].getAttribute('tabindex'), '0');
   assert.equal(dashes[1].getAttribute('aria-hidden'), 'false');
+
+  stepper.dispose();
+});
+
+
+test('adopted stepper owns active classes and progress indicator state', () => {
+  const { StepperView } = loadStepperModule();
+  const root = new FakeElement();
+  const dashes = [new FakeElement(), new FakeElement(), new FakeElement()];
+  dashes.forEach((dash) => root.append(dash));
+  dashes[1].offsetTop = 30;
+  dashes[1].offsetHeight = 10;
+  const progressIndicator = new FakeElement();
+
+  const stepper = new StepperView({
+    container: new FakeElement(),
+    chapters: [chapter('H1', 1, 0), chapter('H2', 2, 1), chapter('H2b', 2, 2)],
+    onSelect() {},
+    hierarchyMode: 'all',
+    existingElement: root,
+    existingDashes: dashes,
+    existingProgressIndicator: progressIndicator,
+  });
+
+  stepper.setActive(1, 'all');
+  assert.equal(dashes[0].classList.contains('active'), false);
+  assert.equal(dashes[1].classList.contains('active'), true);
+  assert.equal(dashes[2].classList.contains('active'), false);
+  assert.equal(progressIndicator.style.height, '35px');
+
+  stepper.setActive(2, 'all');
+  assert.equal(dashes[1].classList.contains('active'), false);
+  assert.equal(dashes[2].classList.contains('active'), true);
+  assert.equal(progressIndicator.style.height, '100%');
 
   stepper.dispose();
 });

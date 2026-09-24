@@ -74,6 +74,7 @@ export interface ViewSessionOptions {
   stepperElement: HTMLElement;
   dashElements: HTMLElement[];
   tooltipElement?: HTMLElement | null;
+  progressIndicator?: HTMLElement | null;
   renderSignature?: string;
   hierarchyMode?: HierarchyMode;
   findReadingHeading?: (chapter: ChapterNode) => Element | null;
@@ -121,6 +122,7 @@ export class ViewSession {
       hierarchyMode: options.hierarchyMode ?? 'all',
       existingElement: options.stepperElement,
       existingDashes: options.dashElements,
+      existingProgressIndicator: options.progressIndicator,
     });
 
     this.tooltip = options.tooltipElement
