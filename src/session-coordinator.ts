@@ -15,6 +15,8 @@ export class SessionCoordinator<
   private readonly generations = new WeakMap<TView, number>();
   private readonly knownViews = new Set<TView>();
 
+  constructor(private readonly onDisposeView?: (view: TView) => void) {}
+
   /** Start a new attach generation and dispose any currently owned session. */
   begin(view: TView): number {
     this.knownViews.add(view);
@@ -55,6 +57,7 @@ export class SessionCoordinator<
     this.knownViews.add(view);
     this.generations.set(view, (this.generations.get(view) ?? 0) + 1);
     this.disposeCurrent(view);
+    this.onDisposeView?.(view);
   }
 
   /** Dispose sessions whose views are no longer mounted. */
@@ -69,7 +72,10 @@ export class SessionCoordinator<
     for (const view of this.knownViews) {
       this.generations.set(view, (this.generations.get(view) ?? 0) + 1);
     }
-    for (const session of this.sessions.values()) session.dispose();
+    for (const [view, session] of this.sessions.entries()) {
+      session.dispose();
+      this.onDisposeView?.(view);
+    }
     this.sessions.clear();
     this.knownViews.clear();
   }

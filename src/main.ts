@@ -7,7 +7,9 @@ import {
   normalizeChapterIdentity,
   resolveChapterIdentity
 } from './core/reading-identity';
-import { installReadingIdentityPersistence, rememberFileChapterSnapshot } from './reading-persistence';
+import { ChapterPipelineCoordinator } from './plugin-coordinator';
+import { ReadingPersistencePlugin, rememberFileChapterSnapshot } from './reading-persistence';
+import { PerformanceCoordinatorPlugin } from './runtime-performance';
 import { SessionCoordinator } from './session-coordinator';
 import { LivePreviewTracker } from './views/live-preview-tracker';
 import { ReadingViewTracker } from './views/reading-view-tracker';
@@ -18,7 +20,6 @@ import { StepperView } from './ui/stepper';
 import { TooltipManager } from './ui/tooltip';
 import { ChapterSuggestModal as TypedChapterSuggestModal } from './ui/modal';
 import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './ui/settings-tab';
-import { applyRuntimePerformancePatches } from './runtime-performance';
 import type { ChapterNode } from './types';
 
 interface LegacyRenderResult {
@@ -34,53 +35,26 @@ interface LegacyRenderResult {
   mode: 'reading' | 'live-preview';
 }
 
-interface ProductionPlugin {
-  settings?: Record<string, unknown>;
-  soundEngine?: { playScrollTick?: (volume: number) => void };
+/**
+ * Typed production entry point owning view session lifecycles via standard
+ * TypeScript class inheritance without CommonJS coordinator bridges or prototype monkey-patching.
+ */
+class TypedProductionPlugin extends ReadingPersistencePlugin {
   sessionCoordinator?: SessionCoordinator<object, ViewSession>;
-  fileChapterSnapshots?: Map<string, ChapterNode[]>;
-  app?: { workspace?: { getLeavesOfType?: (type: string) => Array<{ view?: object }> } };
-  getReadingHeading?: (view: object, chapter: ChapterNode) => Element | null;
-  isActiveMarkdownView?: (view: object) => boolean;
-  jumpToHeading?: (view: object, chapter: ChapterNode) => void;
-  recordReadingPosition?: (view: object, chapter: ChapterNode) => void;
-}
 
-// The legacy class remains a temporary compatibility base for product/UI
-// behavior. Typed production lifecycle now uses normal subclass overrides
-// instead of mutating that base prototype for session ownership.
-// eslint-disable-next-line @typescript-eslint/no-var-requires -- Keep the legacy coordinator as the CommonJS compatibility base until its migration is complete.
-const LegacyPlugin = require('./legacy-main.js') as {
-  new (...args: unknown[]): ProductionPlugin;
-  prototype: ProductionPlugin & {
-    attachStepperToView?: (view: object) => Promise<LegacyRenderResult | undefined | void>;
-    getAllChaptersForView?: (view: object) => Promise<ChapterNode[]>;
-    onunload?: () => void;
-  };
-};
+  private getSessionCoordinator(): SessionCoordinator<object, ViewSession> {
+    this.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>((view) => {
+      this.disconnectReadingHeadingObserver(view);
+    });
+    return this.sessionCoordinator;
+  }
 
-applyRuntimePerformancePatches(LegacyPlugin as never);
-installReadingIdentityPersistence(LegacyPlugin as never);
-
-const legacyAttach = LegacyPlugin.prototype.attachStepperToView;
-const legacyGetAllChaptersForView = LegacyPlugin.prototype.getAllChaptersForView;
-const legacyUnload = LegacyPlugin.prototype.onunload;
-
-function getSessionCoordinator(plugin: ProductionPlugin): SessionCoordinator<object, ViewSession> {
-  plugin.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>();
-  return plugin.sessionCoordinator;
-}
-
-/** Typed production subclass layered over the shrinking legacy compatibility base. */
-class TypedProductionPlugin extends LegacyPlugin {
   /** Attach one generation-guarded typed session after compatibility rendering finishes. */
-  async attachStepperToView(view: object): Promise<void> {
-    if (!legacyAttach) return;
-
-    const coordinator = getSessionCoordinator(this);
+  override async attachStepperToView(view: object): Promise<void> {
+    const coordinator = this.getSessionCoordinator();
     const sessionGeneration = coordinator.begin(view);
 
-    const rendered = await legacyAttach.call(this, view);
+    const rendered = (await super.attachStepperToView(view)) as LegacyRenderResult | undefined | void;
     if (!coordinator.isCurrent(view, sessionGeneration) || !rendered) return;
 
     const typedView = view as { contentEl?: HTMLElement; file?: unknown };
@@ -107,7 +81,8 @@ class TypedProductionPlugin extends LegacyPlugin {
     const hierarchyMode = (this.settings?.hierarchyMode ?? 'all') as 'all' | 'hover-expand' | 'active-branch';
     const renderSignature = buildViewRenderSignature(this, view);
 
-    const session = new ViewSession({
+    let session!: ViewSession;
+    session = new ViewSession({
       view,
       mode,
       container: scroller,
@@ -121,6 +96,11 @@ class TypedProductionPlugin extends LegacyPlugin {
       shouldTrack: () => this.isActiveMarkdownView?.(view) !== false,
       trackImmediately: false,
       isCurrentMount,
+      onDispose: () => {
+        if (!coordinator.get(view) || coordinator.get(view) === session) {
+          this.disconnectReadingHeadingObserver(view);
+        }
+      },
       findReadingHeading: mode === 'reading' && this.getReadingHeading
         ? (chapter) => this.getReadingHeading?.(view, chapter) ?? null
         : undefined,
@@ -135,7 +115,7 @@ class TypedProductionPlugin extends LegacyPlugin {
     });
 
     const markdownLeaves = this.app?.workspace?.getLeavesOfType?.('markdown');
-    const isMounted = markdownLeaves === undefined || markdownLeaves.some((leaf) => leaf?.view === view);
+    const isMounted = markdownLeaves === undefined || markdownLeaves.some((leaf: any) => leaf?.view === view);
     if (typedView.contentEl !== container || !isMounted) {
       coordinator.detach(view);
       session.dispose();
@@ -144,21 +124,20 @@ class TypedProductionPlugin extends LegacyPlugin {
     coordinator.adopt(view, sessionGeneration, session);
   }
 
-  /** Read all chapters through the compatibility base while keeping identity snapshots in typed ownership. */
-  async getAllChaptersForView(view: object): Promise<ChapterNode[]> {
-    if (!legacyGetAllChaptersForView) return [];
-    const chapters = await legacyGetAllChaptersForView.call(this, view);
+  /** Read all chapters through the typed base while keeping identity snapshots in typed ownership. */
+  override async getAllChaptersForView(view: object): Promise<ChapterNode[]> {
+    const chapters = (await super.getAllChaptersForView(view)) as ChapterNode[];
     const filePath = (view as { file?: { path?: string } })?.file?.path;
     if (filePath && chapters.length) rememberFileChapterSnapshot(this, filePath, chapters);
     return chapters;
   }
 
   /** Refresh only views whose structural signature or mounted resources changed. */
-  updateAllMarkdownViews(): void {
-    const coordinator = getSessionCoordinator(this);
+  override updateAllMarkdownViews(): void {
+    const coordinator = this.getSessionCoordinator();
     const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];
     const mountedViews = new Set<object>();
-    leaves.forEach((leaf) => {
+    leaves.forEach((leaf: any) => {
       const view = leaf?.view as { file?: { path?: unknown } } | undefined;
       if (view && typeof view === 'object' && view.file && typeof view.file === 'object' && typeof view.file.path === 'string') {
         mountedViews.add(view);
@@ -166,7 +145,7 @@ class TypedProductionPlugin extends LegacyPlugin {
     });
     coordinator.disposeUnmounted(mountedViews);
 
-    leaves.forEach((leaf) => {
+    leaves.forEach((leaf: any) => {
       const view = leaf?.view as { file?: { path?: unknown } } | undefined;
       if (!view || typeof view !== 'object' || !view.file || typeof view.file !== 'object' || typeof view.file.path !== 'string') {
         return;
@@ -177,12 +156,12 @@ class TypedProductionPlugin extends LegacyPlugin {
     });
   }
 
-  /** Dispose typed session resources before delegating to the compatibility base unload. */
-  onunload(): void {
+  /** Dispose typed session resources before delegating to the base coordinator unload. */
+  override onunload(): void {
     this.sessionCoordinator?.disposeAll();
     this.sessionCoordinator = undefined;
     this.fileChapterSnapshots?.clear();
-    legacyUnload?.call(this);
+    super.onunload();
   }
 }
 
@@ -199,6 +178,9 @@ PublicPlugin.StepperView = StepperView;
 PublicPlugin.TooltipManager = TooltipManager;
 PublicPlugin.TypedChapterSuggestModal = TypedChapterSuggestModal;
 PublicPlugin.TypedChapterPipelineSettingTab = TypedChapterPipelineSettingTab;
+PublicPlugin.ChapterPipelineCoordinator = ChapterPipelineCoordinator;
+PublicPlugin.PerformanceCoordinatorPlugin = PerformanceCoordinatorPlugin;
+PublicPlugin.ReadingPersistencePlugin = ReadingPersistencePlugin;
 PublicPlugin.createChapterIdentity = createChapterIdentity;
 PublicPlugin.createChapterMarkerKey = createChapterMarkerKey;
 PublicPlugin.resolveChapterIdentity = resolveChapterIdentity;

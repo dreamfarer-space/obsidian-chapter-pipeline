@@ -46,10 +46,38 @@ export function truncateExcerpt(text: string, maxLength = 200): string {
   return truncated ? `${truncated}...` : '...';
 }
 
+function stripHtmlComments(input: string): string {
+  let result = '';
+  let startIndex = 0;
+  while (startIndex < input.length) {
+    const commentStart = input.indexOf('<!--', startIndex);
+    if (commentStart === -1) {
+      result += input.slice(startIndex);
+      break;
+    }
+    result += input.slice(startIndex, commentStart);
+    const commentEnd = input.indexOf('-->', commentStart + 4);
+    const commentEndAlt = input.indexOf('--!>', commentStart + 4);
+    let endPos = -1;
+    if (commentEnd !== -1 && commentEndAlt !== -1) {
+      endPos = Math.min(commentEnd + 3, commentEndAlt + 4);
+    } else if (commentEnd !== -1) {
+      endPos = commentEnd + 3;
+    } else if (commentEndAlt !== -1) {
+      endPos = commentEndAlt + 4;
+    }
+
+    if (endPos === -1) {
+      break;
+    }
+    startIndex = endPos;
+  }
+  return result;
+}
+
 export function normalizeHeadingText(text: unknown): string {
   if (!text) return '';
-  return String(text)
-    .replace(/<!--[\s\S]*?-->/g, '')
+  return stripHtmlComments(String(text))
     .replace(/\[\[.*?\|(.*?)\]\]/g, '$1')
     .replace(/\[\[(.*?)\]\]/g, '$1')
     .replace(/\[status::.*?\]/gi, '')
@@ -58,8 +86,7 @@ export function normalizeHeadingText(text: unknown): string {
 }
 
 function cleanHeadingTitle(heading: string): string {
-  const cleaned = heading
-    .replace(/<!--[\s\S]*?-->/g, '')
+  const cleaned = stripHtmlComments(heading)
     .replace(/#([\w\u4e00-\u9fa5-]+)/g, '')
     .replace(/\[status::.*?\]/gi, '')
     .trim();
@@ -119,7 +146,7 @@ export class ChapterParser {
         for (let lineIndex = startLine + 1; lineIndex <= endLine && lineIndex < totalLines; lineIndex += 1) {
           const rawLine = lines[lineIndex];
           if (typeof rawLine !== 'string') continue;
-          let line = rawLine.replace(/<!--[\s\S]*?-->/g, '').trim();
+          let line = stripHtmlComments(rawLine).trim();
 
           if (line.startsWith('```') || line.startsWith('~~~')) {
             inCodeBlock = !inCodeBlock;

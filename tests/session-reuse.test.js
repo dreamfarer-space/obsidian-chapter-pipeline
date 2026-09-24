@@ -314,3 +314,35 @@ test('buildViewRenderSignature and updateAllMarkdownViews safely handle deferred
   assert.equal(harness.getCachedReads(), 1, 'deferred tab without file must not abort subsequent active note attachment');
 });
 
+test('production entry point retires legacy-main.js and uses typed class hierarchy without prototype monkey-patching', () => {
+  const fs = require('node:fs');
+  const mainSource = fs.readFileSync(path.join(__dirname, '../src/main.ts'), 'utf8');
+  const typedCoordinatorPath = path.join(__dirname, '../src/plugin-coordinator.ts');
+  assert.equal(mainSource.includes('legacy-main'), false, 'src/main.ts must not require src/legacy-main.js');
+  assert.equal(fs.existsSync(typedCoordinatorPath), true, 'src/plugin-coordinator.ts must own base coordinator');
+  assert.deepEqual(require('../src/legacy-main.js'), {}, 'src/legacy-main.js must have zero runtime responsibility');
+
+  const { ProductionPlugin } = loadProductionPlugin();
+  assert.equal(
+    Object.getPrototypeOf(ProductionPlugin),
+    ProductionPlugin.ReadingPersistencePlugin,
+    'ProductionPlugin must directly extend ReadingPersistencePlugin'
+  );
+  assert.equal(
+    Object.getPrototypeOf(ProductionPlugin.ReadingPersistencePlugin),
+    ProductionPlugin.PerformanceCoordinatorPlugin,
+    'ReadingPersistencePlugin must directly extend PerformanceCoordinatorPlugin'
+  );
+  assert.equal(
+    Object.getPrototypeOf(ProductionPlugin.PerformanceCoordinatorPlugin),
+    ProductionPlugin.ChapterPipelineCoordinator,
+    'PerformanceCoordinatorPlugin must directly extend ChapterPipelineCoordinator'
+  );
+  assert.equal(
+    Boolean(ProductionPlugin.prototype.__chapterIssue14Patched || ProductionPlugin.prototype.__readingIdentityV2Installed || ProductionPlugin.prototype.__typedSessionsInstalled),
+    false,
+    'production prototype must use class inheritance rather than monkey-patch flags'
+  );
+});
+
+

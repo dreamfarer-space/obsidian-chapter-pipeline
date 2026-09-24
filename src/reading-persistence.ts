@@ -8,6 +8,7 @@ import {
   normalizeChapterIdentity,
   resolveChapterIdentity
 } from './core/reading-identity';
+import { PerformanceCoordinatorPlugin } from './runtime-performance';
 import type { ChapterMarker, ChapterNode, FileLike, ReadingFileState } from './types';
 
 const MAX_FILE_CHAPTER_SNAPSHOTS = 32;
@@ -109,13 +110,14 @@ function readingNoticeText(key: 'resumeUnavailable' | 'resumeNotFound' | 'resume
   return zh ? `可恢复上次阅读：${title}` : `Resume available: ${title}`;
 }
 
-/** Install v2 reading-state persistence on the legacy production coordinator exactly once. */
-export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginConstructor): void {
-  const prototype = LegacyPlugin.prototype;
-  if (prototype.__readingIdentityV2Installed) return;
-  prototype.__readingIdentityV2Installed = true;
+/**
+ * Typed v2 reading-state and bookmark identity layer extending
+ * PerformanceCoordinatorPlugin without prototype monkey-patching.
+ */
+export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
+  fileChapterSnapshots: Map<string, ChapterNode[]> = new Map<string, ChapterNode[]>();
 
-  prototype.loadSettings = async function (this: ReadingAwarePlugin): Promise<void> {
+  override async loadSettings(): Promise<void> {
     const loaded = await this.loadData?.();
     const loadedSettings = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
@@ -125,20 +127,21 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
     if (typeof settings.excerptLength !== 'number' || settings.excerptLength < 60 || settings.excerptLength > 300) settings.excerptLength = 140;
     if (settings.activeColor === '#10b981') settings.activeColor = '#3b82f6';
     if (!settings.customActiveColor) settings.customActiveColor = '#3b82f6';
-    if (settings.enableSound === undefined) settings.enableSound = false;
+    if (typeof settings.enableSound !== 'boolean') settings.enableSound = false;
+    if (typeof settings.enableScrollSound !== 'boolean') settings.enableScrollSound = false;
     if (settings.soundVolume === undefined) settings.soundVolume = 50;
     if (!settings.dockPosition) settings.dockPosition = 'left';
     if (!settings.hierarchyMode) settings.hierarchyMode = 'hover-expand';
     if (settings.showProgressRail === undefined) settings.showProgressRail = false;
-    if (settings.tooltipGlassmorphism === undefined) settings.tooltipGlassmorphism = false;
+    if (typeof settings.tooltipGlassmorphism !== 'boolean') settings.tooltipGlassmorphism = false;
     if (settings.showChapterOrder === undefined) settings.showChapterOrder = false;
     if (settings.readingBookmarksEnabled === undefined) settings.readingBookmarksEnabled = false;
 
     settings.readingState = normalizeReadingState(settings.readingState);
     await this.saveSettings?.();
-  };
+  }
 
-  prototype.ensureReadingState = function (this: ReadingAwarePlugin) {
+  override ensureReadingState(): any {
     const state = this.settings?.readingState;
     const invalid = !state || typeof state !== 'object' || Array.isArray(state) ||
       !(state as Record<string, unknown>).files ||
@@ -149,15 +152,15 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
       this.settings.readingState = normalizeReadingState(state);
     }
     return this.settings?.readingState;
-  };
+  }
 
-  prototype.getChapterMarkers = function (this: ReadingAwarePlugin, file: FileLike, chapter: ChapterNode): ChapterMarker | null {
+  override getChapterMarkers(file: FileLike, chapter: ChapterNode): ChapterMarker | null {
     if (!file || !chapter?.id) return null;
     const chapters = getIdentityChapters(this, file, chapter);
     return findChapterMarkerEntry(this, file, chapter, chapters)?.marker ?? null;
-  };
+  }
 
-  prototype.recordReadingPosition = function (this: ReadingAwarePlugin, view: object, chapter: ChapterNode): boolean {
+  override recordReadingPosition(view: object, chapter: ChapterNode): boolean {
     const typedView = view as { file?: FileLike };
     if (!this.isReadingBookmarksEnabled?.() || !this.isActiveMarkdownView?.(view) || !typedView.file || !chapter?.id) return false;
 
@@ -184,9 +187,9 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
     };
     this.scheduleReadingStateSave?.();
     return true;
-  };
+  }
 
-  prototype.resumeLastChapter = async function (this: ReadingAwarePlugin, view?: object): Promise<boolean> {
+  override async resumeLastChapter(view?: object): Promise<boolean> {
     if (!this.isReadingBookmarksEnabled?.()) return false;
     const targetView = view && (view as { file?: FileLike }).file
       ? view
@@ -232,10 +235,9 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
     }
     this.jumpToHeading?.(targetView, targetChapter);
     return true;
-  };
+  }
 
-  prototype.toggleChapterMarker = async function (
-    this: ReadingAwarePlugin,
+  override async toggleChapterMarker(
     view: object,
     chapter: ChapterNode,
     markerName: 'revisit' | 'important'
@@ -264,9 +266,9 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
     await this.saveSettings?.();
     this.updateAllMarkdownViews?.();
     return current[markerName];
-  };
+  }
 
-  prototype.clearChapterMarkers = async function (this: ReadingAwarePlugin, view: object, chapter: ChapterNode): Promise<boolean> {
+  override async clearChapterMarkers(view: object, chapter: ChapterNode): Promise<boolean> {
     const file = (view as { file?: FileLike })?.file;
     if (!file || !chapter?.id) return false;
     const chapters = getIdentityChapters(this, file, chapter, view);
@@ -279,10 +281,9 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
     await this.saveSettings?.();
     this.updateAllMarkdownViews?.();
     return true;
-  };
+  }
 
-  prototype.mergeReadingFileStates = function (
-    this: ReadingAwarePlugin,
+  override mergeReadingFileStates(
     destinationState?: ReadingFileState,
     sourceState?: ReadingFileState
   ): ReadingFileState {
@@ -306,10 +307,9 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
       merged.resume = { ...(newerSource ? sourceResume : destinationResume)! };
     }
     return merged;
-  };
+  }
 
-  prototype.maybeShowResumeNotice = function (
-    this: ReadingAwarePlugin,
+  override maybeShowResumeNotice(
     view: object,
     content: string,
     file: FileLike
@@ -336,26 +336,26 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
       }
       this.showNotice?.(readingNoticeText('resumeAvailable', chapter.title || savedResume.title));
     }
-  };
-
-  const legacyMigrateReadingState = prototype.migrateReadingState;
-  if (typeof legacyMigrateReadingState === 'function') {
-    prototype.migrateReadingState = async function (this: ReadingAwarePlugin, oldPath: string, newPath: string) {
-      const result = await legacyMigrateReadingState.call(this, oldPath, newPath);
-      this.fileChapterSnapshots?.delete(oldPath);
-      return result;
-    };
   }
 
-  const legacyPruneDeletedReadingState = prototype.pruneDeletedReadingState;
-  if (typeof legacyPruneDeletedReadingState === 'function') {
-    prototype.pruneDeletedReadingState = async function (this: ReadingAwarePlugin, deletedPath: string) {
-      const result = await legacyPruneDeletedReadingState.call(this, deletedPath);
-      const prefix = deletedPath.endsWith('/') ? deletedPath : `${deletedPath}/`;
-      for (const path of this.fileChapterSnapshots?.keys() ?? []) {
-        if (path === deletedPath || path.startsWith(prefix)) this.fileChapterSnapshots?.delete(path);
-      }
-      return result;
-    };
+  override async migrateReadingState(oldPath: string, newPath: string): Promise<any> {
+    const result = await super.migrateReadingState(oldPath, newPath);
+    this.fileChapterSnapshots?.delete(oldPath);
+    return result;
   }
+
+  override async pruneDeletedReadingState(deletedPath: string): Promise<any> {
+    const result = await super.pruneDeletedReadingState(deletedPath);
+    const prefix = deletedPath.endsWith('/') ? deletedPath : `${deletedPath}/`;
+    for (const path of this.fileChapterSnapshots?.keys() ?? []) {
+      if (path === deletedPath || path.startsWith(prefix)) this.fileChapterSnapshots?.delete(path);
+    }
+    return result;
+  }
+}
+
+export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginConstructor): void {
+  const prototype = LegacyPlugin.prototype;
+  if (prototype.__readingIdentityV2Installed) return;
+  prototype.__readingIdentityV2Installed = true;
 }

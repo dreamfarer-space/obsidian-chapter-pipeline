@@ -87,6 +87,8 @@ export interface ViewSessionOptions {
   trackImmediately?: boolean;
   /** Validate that the adopted DOM/scroller resources are still the mounted resources for this view. */
   isCurrentMount?: () => boolean;
+  /** Optional cleanup hook invoked when this session is disposed. */
+  onDispose?: () => void;
 }
 
 /**
@@ -186,6 +188,7 @@ export class ViewSession {
     this.tooltip?.dispose();
     this.stepper.dispose();
     this.chapters = [];
+    this.options.onDispose?.();
   }
 }
 
