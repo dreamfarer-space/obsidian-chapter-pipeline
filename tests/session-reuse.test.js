@@ -300,6 +300,10 @@ test('buildViewRenderSignature and updateAllMarkdownViews safely handle deferred
   const deferredView = { contentEl: {} };
   assert.doesNotThrow(() => buildViewRenderSignature(harness.plugin, deferredView));
 
+  const extracted = harness.plugin.extractChapters('# Heading 1\n\nBody\n\n## Heading 2', undefined);
+  assert.equal(extracted.length, 2, 'extractChapters must fall back to markdown headings without calling getFileCache(undefined)');
+  assert.deepEqual(extracted.map((chapter) => chapter.title), ['Heading 1', 'Heading 2']);
+
   harness.plugin.app.workspace.getLeavesOfType = () => [
     { isDeferred: true, view: deferredView },
     { isDeferred: false, view: harness.view },
