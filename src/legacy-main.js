@@ -2385,6 +2385,11 @@ class ChapterPipelinePlugin extends Plugin {
       tooltipElement: floatingTooltip,
       railIndicator,
       trackingContainer: scrollers[0] || this.getViewScroller(container, view) || null,
+      releaseLegacyScrollTracking: () => {
+        scrollers.forEach((scroller) => scroller?.removeEventListener?.('scroll', throttledScroll, true));
+        const currentBinding = this.scrollBindings.get(container);
+        if (currentBinding?.handler === throttledScroll) this.scrollBindings.delete(container);
+      },
       mode: this.isReadingMode(view, container) ? 'reading' : 'live-preview'
     };
   }
