@@ -162,12 +162,6 @@ for (const name of [
   scannerRules[name] = 'off';
 }
 
-const jsTypeScriptRulesOff = Object.fromEntries(
-  Object.keys(scannerRules)
-    .filter((name) => name.startsWith('@typescript-eslint/'))
-    .map((name) => [name, 'off'])
-);
-
 export default defineConfig(
   globalIgnores([
     'node_modules',
@@ -211,27 +205,15 @@ export default defineConfig(
     languageOptions: {
       globals: {
         ...globals.browser
+      },
+      parserOptions: {
+        projectService: {
+          allowDefaultProject: ['src/*.js']
+        },
+        tsconfigRootDir: process.cwd()
       }
     },
     rules: scannerRules
-  },
-  {
-    files: ['**/*.ts', '**/*.tsx'],
-    languageOptions: {
-      parserOptions: {
-        projectService: true,
-        tsconfigRootDir: process.cwd()
-      }
-    }
-  },
-  {
-    files: ['**/*.js', '**/*.jsx'],
-    languageOptions: {
-      parserOptions: {
-        projectService: false
-      }
-    },
-    rules: jsTypeScriptRulesOff
   }
 );
 `;
