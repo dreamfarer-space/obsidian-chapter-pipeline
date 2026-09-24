@@ -7,7 +7,9 @@ import {
   normalizeChapterIdentity,
   resolveChapterIdentity
 } from './core/reading-identity';
+import { ChapterPipelineCoordinator } from './plugin-coordinator';
 import { ReadingPersistencePlugin, rememberFileChapterSnapshot } from './reading-persistence';
+import { PerformanceCoordinatorPlugin } from './runtime-performance';
 import { SessionCoordinator } from './session-coordinator';
 import { LivePreviewTracker } from './views/live-preview-tracker';
 import { ReadingViewTracker } from './views/reading-view-tracker';
@@ -168,6 +170,9 @@ PublicPlugin.StepperView = StepperView;
 PublicPlugin.TooltipManager = TooltipManager;
 PublicPlugin.TypedChapterSuggestModal = TypedChapterSuggestModal;
 PublicPlugin.TypedChapterPipelineSettingTab = TypedChapterPipelineSettingTab;
+PublicPlugin.ChapterPipelineCoordinator = ChapterPipelineCoordinator;
+PublicPlugin.PerformanceCoordinatorPlugin = PerformanceCoordinatorPlugin;
+PublicPlugin.ReadingPersistencePlugin = ReadingPersistencePlugin;
 PublicPlugin.createChapterIdentity = createChapterIdentity;
 PublicPlugin.createChapterMarkerKey = createChapterMarkerKey;
 PublicPlugin.resolveChapterIdentity = resolveChapterIdentity;

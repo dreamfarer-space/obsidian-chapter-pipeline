@@ -324,6 +324,21 @@ test('production entry point retires legacy-main.js and uses typed class hierarc
 
   const { ProductionPlugin } = loadProductionPlugin();
   assert.equal(
+    Object.getPrototypeOf(ProductionPlugin),
+    ProductionPlugin.ReadingPersistencePlugin,
+    'ProductionPlugin must directly extend ReadingPersistencePlugin'
+  );
+  assert.equal(
+    Object.getPrototypeOf(ProductionPlugin.ReadingPersistencePlugin),
+    ProductionPlugin.PerformanceCoordinatorPlugin,
+    'ReadingPersistencePlugin must directly extend PerformanceCoordinatorPlugin'
+  );
+  assert.equal(
+    Object.getPrototypeOf(ProductionPlugin.PerformanceCoordinatorPlugin),
+    ProductionPlugin.ChapterPipelineCoordinator,
+    'PerformanceCoordinatorPlugin must directly extend ChapterPipelineCoordinator'
+  );
+  assert.equal(
     Boolean(ProductionPlugin.prototype.__chapterIssue14Patched || ProductionPlugin.prototype.__readingIdentityV2Installed || ProductionPlugin.prototype.__typedSessionsInstalled),
     false,
     'production prototype must use class inheritance rather than monkey-patch flags'

@@ -122,9 +122,83 @@ test('getReadingHeading caches the broad heading query for large Reading View no
     assert.equal(heading, headings[index]);
   }
 
+  for (let missingIndex = 2000; missingIndex < 2050; missingIndex += 1) {
+    const missing = plugin.getReadingHeading(view, {
+      title: `Unrendered Section ${missingIndex}`,
+      rawHeading: `Unrendered Section ${missingIndex}`,
+      level: 2,
+      line: missingIndex * 3,
+      headingIndex: missingIndex,
+    });
+    assert.equal(missing, null);
+  }
+
   assert.equal(
     broadQueries,
     1,
-    'the 1000-heading DOM snapshot should be built once, not once per chapter lookup',
+    'the 1000-heading DOM snapshot should be built once, even when off-DOM chapters return null',
   );
 });
+
+test('jumpToHeading stops stale or disconnected calibratePreview loops before mutating scrollTop', () => {
+  const frames = [];
+  const plugin = new ChapterPipelinePlugin();
+  plugin.scheduleFrame = (cb) => {
+    frames.push(cb);
+    return frames.length;
+  };
+
+  let targetTop = 180;
+  const heading = {
+    isConnected: true,
+    getBoundingClientRect() {
+      return { top: targetTop };
+    },
+  };
+  const scroller = {
+    isConnected: true,
+    scrollTop: 0,
+    scrollHeight: 2000,
+    clientHeight: 500,
+    addEventListener() {},
+    getBoundingClientRect() {
+      return { top: 100 };
+    },
+    scrollTo({ top }) {
+      this.scrollTop = top;
+    },
+  };
+  const container = {
+    querySelector(selector) {
+      return selector === '.markdown-preview-view' ? scroller : null;
+    },
+  };
+  const view = {
+    file: { path: 'note.md' },
+    contentEl: container,
+    getMode: () => 'preview',
+  };
+  plugin.getReadingHeading = () => heading;
+
+  plugin.jumpToHeading(view, { line: 10, title: 'First' });
+  assert.equal(frames.length, 1);
+  const firstLoopFrame = frames.shift();
+
+  // Start a second jump on the same view before the first calibration frame runs.
+  plugin.jumpToHeading(view, { line: 20, title: 'Second' });
+  assert.equal(frames.length, 1);
+  const secondLoopFrame = frames.shift();
+
+  scroller.scrollTop = 300;
+  targetTop = 250;
+  firstLoopFrame();
+  assert.equal(scroller.scrollTop, 300, 'stale calibration generation must not mutate scrollTop');
+  assert.equal(frames.length, 0, 'stale calibration generation must not schedule another frame');
+
+  // Disconnect scroller before running the active calibration frame.
+  scroller.isConnected = false;
+  secondLoopFrame();
+  assert.equal(scroller.scrollTop, 300, 'disconnected previewScroller must not mutate scrollTop');
+  assert.equal(frames.length, 0, 'disconnected previewScroller must not schedule another frame');
+});
+

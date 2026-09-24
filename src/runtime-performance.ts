@@ -151,6 +151,50 @@ function resolveReadingHeading(
   return null;
 }
 
+type ReadingHeadingObserverState = {
+  observer: MutationObserver | null;
+  dirty: boolean;
+  childSignature: string;
+};
+
+function getScrollerChildSignature(scroller: Element): string {
+  const children = (scroller as Element & { children?: ArrayLike<Element> }).children;
+  if (!children || typeof children.length !== 'number') return '';
+  const length = children.length;
+  const first = length > 0 ? children[0]?.tagName || '' : '';
+  const lastNode = length > 0 ? children[length - 1] : undefined;
+  const last = lastNode
+    ? (lastNode.getAttribute?.('data-heading') || lastNode.textContent || lastNode.tagName || '')
+    : '';
+  return `${length}:${first}:${last}`;
+}
+
+function isHeadingOrSectionNode(node: unknown): boolean {
+  if (!node || typeof node !== 'object') return false;
+  const element = node as Element;
+  const tag = String(element.tagName || '').toUpperCase();
+  if (/^H[1-6]$/.test(tag)) return true;
+  if (element.classList?.contains?.('markdown-preview-section')) return true;
+  if (typeof element.querySelector === 'function') {
+    return Boolean(element.querySelector('h1, h2, h3, h4, h5, h6, .markdown-preview-section'));
+  }
+  return false;
+}
+
+function didReadingHeadingsMutate(records?: MutationRecord[]): boolean {
+  if (!Array.isArray(records) || records.length === 0) return true;
+  for (const record of records) {
+    if (isHeadingOrSectionNode(record.target)) return true;
+    for (const node of Array.from(record.addedNodes || [])) {
+      if (isHeadingOrSectionNode(node)) return true;
+    }
+    for (const node of Array.from(record.removedNodes || [])) {
+      if (isHeadingOrSectionNode(node)) return true;
+    }
+  }
+  return false;
+}
+
 /**
  * Typed performance and Reading View navigation layer extending the base
  * plugin coordinator without prototype monkey-patching.
@@ -158,6 +202,46 @@ function resolveReadingHeading(
 export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
   private readonly headingFingerprints = new Map<string, string>();
   private readonly readingHeadingSnapshots = new WeakMap<object, ReadingHeadingSnapshot>();
+  private readonly readingHeadingObservers = new Map<Element, ReadingHeadingObserverState>();
+  private readonly viewReadingScrollers = new WeakMap<object, Element>();
+  private readonly jumpCalibrationGenerations = new WeakMap<object, number>();
+
+  private ensureReadingHeadingObserver(scroller: Element, forceReset = false): ReadingHeadingObserverState {
+    const existing = this.readingHeadingObservers.get(scroller);
+    if (existing && !forceReset) return existing;
+    if (existing) {
+      existing.observer?.disconnect?.();
+      this.readingHeadingObservers.delete(scroller);
+    }
+
+    const state: ReadingHeadingObserverState = {
+      observer: null,
+      dirty: true,
+      childSignature: getScrollerChildSignature(scroller)
+    };
+    if (typeof MutationObserver === 'function' && typeof (scroller as Element & { addEventListener?: unknown }).addEventListener === 'function') {
+      const observer = new MutationObserver((records) => {
+        if (didReadingHeadingsMutate(records)) {
+          state.dirty = true;
+          this.readingHeadingSnapshots.delete(scroller);
+        }
+      });
+      observer.observe(scroller, { childList: true, subtree: true });
+      state.observer = observer;
+    }
+    this.readingHeadingObservers.set(scroller, state);
+    return state;
+  }
+
+  private disconnectReadingHeadingObserver(scroller: Element | null | undefined): void {
+    if (!scroller) return;
+    const state = this.readingHeadingObservers.get(scroller);
+    if (state) {
+      state.observer?.disconnect?.();
+      this.readingHeadingObservers.delete(scroller);
+    }
+    this.readingHeadingSnapshots.delete(scroller);
+  }
 
   override async loadSettings(): Promise<void> {
     const persisted = await this.loadData?.();
@@ -295,26 +379,54 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
     if (!scroller) return super.getReadingHeading(view, chapter) ?? null;
 
+    const observerState = this.ensureReadingHeadingObserver(scroller);
+    const currentSignature = getScrollerChildSignature(scroller);
+    if (currentSignature !== observerState.childSignature) {
+      observerState.dirty = true;
+      observerState.childSignature = currentSignature;
+    }
+
     let snapshot = this.readingHeadingSnapshots.get(scroller);
-    if (!snapshot) {
+    if (!snapshot || observerState.dirty) {
       snapshot = buildReadingHeadingSnapshot(scroller);
       this.readingHeadingSnapshots.set(scroller, snapshot);
+      observerState.dirty = false;
+      observerState.childSignature = currentSignature;
     }
 
     let resolved = resolveReadingHeading(snapshot, scroller, chapter);
-    if (resolved && (resolved as Element & { isConnected?: boolean }).isConnected !== false) {
+    if (!resolved) {
+      return null;
+    }
+    if ((resolved as Element & { isConnected?: boolean }).isConnected !== false) {
       return resolved;
     }
 
     snapshot = buildReadingHeadingSnapshot(scroller);
     this.readingHeadingSnapshots.set(scroller, snapshot);
+    observerState.dirty = false;
+    observerState.childSignature = getScrollerChildSignature(scroller);
     resolved = resolveReadingHeading(snapshot, scroller, chapter);
-    return resolved;
+    return resolved && (resolved as Element & { isConnected?: boolean }).isConnected !== false
+      ? resolved
+      : null;
   }
 
   override async attachStepperToView(view: any): Promise<any> {
-    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view');
-    if (scroller) this.readingHeadingSnapshots.delete(scroller);
+    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
+    if (view && typeof view === 'object') {
+      const previousScroller = this.viewReadingScrollers.get(view);
+      if (previousScroller && previousScroller !== scroller) {
+        this.disconnectReadingHeadingObserver(previousScroller);
+      }
+      if (scroller) {
+        this.viewReadingScrollers.set(view, scroller);
+      }
+    }
+    if (scroller) {
+      this.readingHeadingSnapshots.delete(scroller);
+      this.ensureReadingHeadingObserver(scroller, true);
+    }
 
     const result = await super.attachStepperToView(view);
     const tooltip = result?.tooltipElement ?? this.viewTooltips?.get?.(view);
@@ -326,6 +438,13 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
 
   override jumpToHeading(view: any, chapter: any): any {
     const targetView = view && view.file ? view : null;
+    const generation = targetView
+      ? (this.jumpCalibrationGenerations.get(targetView) || 0) + 1
+      : 0;
+    if (targetView) {
+      this.jumpCalibrationGenerations.set(targetView, generation);
+    }
+
     const line = typeof chapter === 'number' ? chapter : chapter?.line;
     const isReading = targetView && this.isReadingMode?.(targetView, targetView.contentEl);
     const previewRoot = isReading
@@ -375,6 +494,13 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
       shouldContinue: true
     };
     const calibratePreview = () => {
+      if (
+        this.jumpCalibrationGenerations.get(targetView) !== generation
+        || (previewScroller as Element & { isConnected?: boolean }).isConnected === false
+      ) {
+        return;
+      }
+
       if (!targetHeading && typeof chapter === 'object') {
         targetHeading = this.getReadingHeading?.(targetView, chapter) || null;
         if (targetHeading) alignSmoothly();
@@ -395,11 +521,26 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
         threshold: 2,
         stableFramesRequired: 2
       });
-      if (state.shouldContinue) this.scheduleFrame(calibratePreview);
+      if (
+        state.shouldContinue
+        && this.jumpCalibrationGenerations.get(targetView) === generation
+        && (previewScroller as Element & { isConnected?: boolean }).isConnected !== false
+      ) {
+        this.scheduleFrame(calibratePreview);
+      }
     };
 
     this.scheduleFrame(calibratePreview);
     return undefined;
+  }
+
+  override onunload(): void {
+    this.readingHeadingObservers.forEach((entry, scroller) => {
+      entry.observer?.disconnect?.();
+      this.readingHeadingSnapshots.delete(scroller);
+    });
+    this.readingHeadingObservers.clear();
+    super.onunload();
   }
 }
 
