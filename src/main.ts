@@ -7,7 +7,7 @@ import {
   normalizeChapterIdentity,
   resolveChapterIdentity
 } from './core/reading-identity';
-import { installReadingIdentityPersistence } from './reading-persistence';
+import { installReadingIdentityPersistence, rememberFileChapterSnapshot } from './reading-persistence';
 import { SessionCoordinator } from './session-coordinator';
 import { LivePreviewTracker } from './views/live-preview-tracker';
 import { ReadingViewTracker } from './views/reading-view-tracker';
@@ -54,6 +54,7 @@ const LegacyPlugin = require('./legacy-main.js') as {
   new (...args: unknown[]): ProductionPlugin;
   prototype: ProductionPlugin & {
     attachStepperToView?: (view: object) => Promise<LegacyRenderResult | undefined | void>;
+    getAllChaptersForView?: (view: object) => Promise<ChapterNode[]>;
     onunload?: () => void;
   };
 };
@@ -62,6 +63,7 @@ applyRuntimePerformancePatches(LegacyPlugin as never);
 installReadingIdentityPersistence(LegacyPlugin as never);
 
 const legacyAttach = LegacyPlugin.prototype.attachStepperToView;
+const legacyGetAllChaptersForView = LegacyPlugin.prototype.getAllChaptersForView;
 const legacyUnload = LegacyPlugin.prototype.onunload;
 
 function getSessionCoordinator(plugin: ProductionPlugin): SessionCoordinator<object, ViewSession> {
@@ -96,6 +98,8 @@ class TypedProductionPlugin extends LegacyPlugin {
       isCurrentMount,
       mode
     } = rendered;
+    const filePath = (typedView.file as { path?: string }).path;
+    if (filePath && chapters.length) rememberFileChapterSnapshot(this, filePath, chapters);
     if (!chapters.length || !scroller) return;
 
     releaseLegacyScrollTracking();
@@ -138,6 +142,15 @@ class TypedProductionPlugin extends LegacyPlugin {
       return;
     }
     coordinator.adopt(view, sessionGeneration, session);
+  }
+
+  /** Read all chapters through the compatibility base while keeping identity snapshots in typed ownership. */
+  async getAllChaptersForView(view: object): Promise<ChapterNode[]> {
+    if (!legacyGetAllChaptersForView) return [];
+    const chapters = await legacyGetAllChaptersForView.call(this, view);
+    const filePath = (view as { file?: { path?: string } })?.file?.path;
+    if (filePath && chapters.length) rememberFileChapterSnapshot(this, filePath, chapters);
+    return chapters;
   }
 
   /** Refresh only views whose structural signature or mounted resources changed. */
