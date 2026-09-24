@@ -49,8 +49,8 @@ jobs:
 
           replace_once(
               'src/main.ts',
-              '''  const prototype = LegacyPlugin.prototype as ProductionPlugin & {\n    attachStepperToView?: (view: object) => Promise<void>;\n''',
-              '''  const prototype = LegacyPlugin.prototype as ProductionPlugin & {\n    attachStepperToView?: (view: object) => Promise<LegacyRenderResult | undefined>;\n'''
+              '''  const legacyAttach = prototype.attachStepperToView;\n''',
+              '''  const legacyAttach = prototype.attachStepperToView as\n    | ((view: object) => Promise<LegacyRenderResult | undefined>)\n    | undefined;\n'''
           )
 
           replace_once(
