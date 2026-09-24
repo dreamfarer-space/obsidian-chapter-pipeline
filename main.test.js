@@ -504,7 +504,7 @@ test('Reading View renders the chapter pipeline, binds scroll, and reflects chap
   assert.equal(stepper.classList.contains('show-chapter-order'), false);
   assert.equal(disabledHarness.scroller.listeners.get('scroll')?.length, 1);
   assert.equal(disabledHarness.sourceScroller.listeners.get('scroll'), undefined);
-  const readingSession = disabledHarness.plugin.viewSessions?.get(disabledHarness.view);
+  const readingSession = disabledHarness.plugin.sessionCoordinator?.get(disabledHarness.view);
   assert.ok(readingSession instanceof ChapterPipelinePlugin.ViewSession);
   assert.ok(readingSession.tracker instanceof ChapterPipelinePlugin.ReadingViewTracker);
   assert.equal(disabledHarness.plugin.scrollBindings.has(disabledHarness.container), false);
@@ -522,33 +522,32 @@ test('Reading View renders the chapter pipeline, binds scroll, and reflects chap
   const liveHarness = createReadingHarness();
   liveHarness.view.getMode = () => 'source';
   await liveHarness.plugin.attachStepperToView(liveHarness.view);
-  const liveSession = liveHarness.plugin.viewSessions?.get(liveHarness.view);
+  const liveSession = liveHarness.plugin.sessionCoordinator?.get(liveHarness.view);
   assert.ok(liveSession instanceof ChapterPipelinePlugin.ViewSession);
   assert.ok(liveSession.tracker instanceof ChapterPipelinePlugin.LivePreviewTracker);
   assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);
 
   await liveHarness.plugin.attachStepperToView(liveHarness.view);
-  const replacementLiveSession = liveHarness.plugin.viewSessions?.get(liveHarness.view);
+  const replacementLiveSession = liveHarness.plugin.sessionCoordinator?.get(liveHarness.view);
   assert.ok(replacementLiveSession instanceof ChapterPipelinePlugin.ViewSession);
   assert.notEqual(replacementLiveSession, liveSession);
   assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length, 1);
 
   liveHarness.plugin.onunload();
   assert.equal(liveHarness.sourceScroller.listeners.get('scroll')?.length ?? 0, 0);
-  assert.equal(liveHarness.plugin.viewSessions.size, 0);
+  assert.equal(liveHarness.plugin.sessionCoordinator, undefined);
 });
 
 test('typed sessions are disposed when Markdown views leave the workspace', async () => {
   const harness = createReadingHarness();
   await harness.plugin.attachStepperToView(harness.view);
-  assert.ok(harness.plugin.viewSessions?.has(harness.view));
+  assert.ok(harness.plugin.sessionCoordinator?.get(harness.view));
   assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
 
   harness.app.workspace.getLeavesOfType = () => [];
   harness.plugin.updateAllMarkdownViews();
 
-  assert.equal(harness.plugin.viewSessions?.has(harness.view), false);
-  assert.equal(harness.plugin.viewSessionVersions?.has(harness.view), false);
+  assert.equal(harness.plugin.sessionCoordinator?.get(harness.view), undefined);
   assert.equal(harness.scroller.listeners.get('scroll')?.length ?? 0, 0);
 });
 
@@ -564,7 +563,7 @@ test('concurrent typed attachment keeps only the newest reverse-completing sessi
   const content = '# First\nbody\nbody\nbody\n## Second\nbody';
   pendingReads[1](content);
   await secondAttach;
-  const newestSession = harness.plugin.viewSessions?.get(harness.view);
+  const newestSession = harness.plugin.sessionCoordinator?.get(harness.view);
   assert.ok(newestSession instanceof ChapterPipelinePlugin.ViewSession);
   assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
   assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
@@ -572,7 +571,7 @@ test('concurrent typed attachment keeps only the newest reverse-completing sessi
   pendingReads[0](content);
   await firstAttach;
 
-  assert.equal(harness.plugin.viewSessions?.get(harness.view), newestSession);
+  assert.equal(harness.plugin.sessionCoordinator?.get(harness.view), newestSession);
   assert.equal(harness.scroller.listeners.get('scroll')?.length, 1);
   assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
 });
@@ -604,7 +603,7 @@ test('typed attachment discards a session when the view closes during cachedRead
   resolveRead('# First\nbody\nbody\nbody\n## Second\nbody');
   await attach;
 
-  assert.equal(harness.plugin.viewSessions?.has(harness.view), false);
+  assert.equal(harness.plugin.sessionCoordinator?.get(harness.view), undefined);
   assert.equal(harness.scroller.listeners.get('scroll')?.length ?? 0, 0);
   assert.equal(harness.plugin.scrollBindings.has(harness.container), false);
   assert.equal(harness.container.querySelector('.codex-stepper-container'), null);
@@ -620,7 +619,7 @@ test('typed sessions keep the rendered per-view chapter snapshot during resume l
   harness.plugin.settings.readingState = { files: { 'note.md': { markers: {}, resume: { chapterId: allChapters[1].id, title: allChapters[1].title, updatedAt: 1 } } } };
 
   await harness.plugin.attachStepperToView(harness.view);
-  const session = harness.plugin.viewSessions?.get(harness.view);
+  const session = harness.plugin.sessionCoordinator?.get(harness.view);
   assert.ok(session instanceof ChapterPipelinePlugin.ViewSession);
   assert.equal(harness.container.querySelectorAll('.codex-dash-item').length, 1);
   assert.equal(session.getChapters().length, 1);
