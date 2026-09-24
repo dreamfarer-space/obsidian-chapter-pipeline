@@ -189,20 +189,14 @@ test('non-render sound changes do not invalidate the mounted rail signature', ()
   assert.equal(buildViewRenderSignature(plugin, view), before);
 });
 
-test('session reuse requires identical signature, stepper, and tracking scroller identity', () => {
+test('session reuse requires an identical signature and a current mount contract', () => {
   const { canReuseRenderedSession } = loadRenderSignatureModule();
-  const stepper = {};
-  const scroller = {};
-  const session = {
-    renderSignature: 'same',
-    stepper: { element: stepper },
-    trackingContainer: scroller,
-  };
-  assert.equal(canReuseRenderedSession(session, 'same', stepper, scroller), true);
-  assert.equal(canReuseRenderedSession(session, 'changed', stepper, scroller), false);
-  assert.equal(canReuseRenderedSession(session, 'same', {}, scroller), false);
-  assert.equal(canReuseRenderedSession(session, 'same', stepper, {}), false);
-  assert.equal(canReuseRenderedSession(undefined, 'same', stepper, scroller), false);
+  const currentSession = { renderSignature: 'same', isCurrentMount: () => true };
+  const replacedSession = { renderSignature: 'same', isCurrentMount: () => false };
+  assert.equal(canReuseRenderedSession(currentSession, 'same'), true);
+  assert.equal(canReuseRenderedSession(currentSession, 'changed'), false);
+  assert.equal(canReuseRenderedSession(replacedSession, 'same'), false);
+  assert.equal(canReuseRenderedSession(undefined, 'same'), false);
 });
 
 test('session coordinator rejects stale async adoption and disposes the stale session', () => {
@@ -233,6 +227,7 @@ test('production updateAllMarkdownViews preserves an unchanged mounted session a
     renderSignature: buildViewRenderSignature(harness.plugin, harness.view),
     stepper: { element: harness.stepper },
     trackingContainer: harness.scroller,
+    isCurrentMount: () => true,
     dispose() { disposed += 1; },
   };
   const coordinator = seedSession(harness, session);
@@ -255,6 +250,7 @@ test('production updateAllMarkdownViews invalidates reuse when the tracking scro
     renderSignature: buildViewRenderSignature(harness.plugin, harness.view),
     stepper: { element: harness.stepper },
     trackingContainer: {},
+    isCurrentMount: () => false,
     dispose() { disposed += 1; },
   };
   seedSession(harness, session);
@@ -276,6 +272,7 @@ test('production updateAllMarkdownViews invalidates a session after a structural
     renderSignature: buildViewRenderSignature(harness.plugin, harness.view),
     stepper: { element: harness.stepper },
     trackingContainer: harness.scroller,
+    isCurrentMount: () => true,
     dispose() { disposed += 1; },
   };
   seedSession(harness, session);

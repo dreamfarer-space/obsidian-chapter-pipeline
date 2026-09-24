@@ -17,12 +17,10 @@ export interface RenderSignaturePluginLike {
       getFileCache?: (file: unknown) => { headings?: HeadingLike[] } | null;
     };
   };
-  isReadingMode?: (view: object, container?: HTMLElement | null) => boolean;
 }
 
 interface ViewLike {
   file?: FileLike;
-  contentEl?: HTMLElement;
 }
 
 /** Compact deterministic FNV-1a hash for potentially large heading/marker inputs. */
@@ -61,13 +59,10 @@ export function buildViewRenderSignature(pluginValue: unknown, view: object): st
     const marker = markers[chapterId];
     return `${chapterId}:${marker?.revisit === true ? 1 : 0}:${marker?.important === true ? 1 : 0}`;
   }).join('\u0001'));
-  const mode = plugin.isReadingMode?.(view, host.contentEl ?? null) === true ? 'reading' : 'live-preview';
-
   return [
     filePath,
     Number(file?.stat?.mtime) || 0,
     plugin.documentRevisions?.get(filePath) ?? 0,
-    mode,
     headings.length,
     headingSignature,
     settings.minHeadingLevel ?? 1,
@@ -88,23 +83,17 @@ export function buildViewRenderSignature(pluginValue: unknown, view: object): st
   ].join('|');
 }
 
-/** Return true only when the signature and both adopted resource owners still match. */
+/** Return true only when the structural signature matches and the session still owns the current mount. */
 export function canReuseRenderedSession(
   session: {
     renderSignature: string;
-    stepper: { element: HTMLElement };
-    trackingContainer: HTMLElement;
+    isCurrentMount: () => boolean;
   } | undefined,
-  renderSignature: string,
-  mountedStepper: HTMLElement | null,
-  mountedTrackingContainer: HTMLElement | null
+  renderSignature: string
 ): boolean {
   return Boolean(
     session
     && session.renderSignature === renderSignature
-    && mountedStepper
-    && session.stepper.element === mountedStepper
-    && mountedTrackingContainer
-    && session.trackingContainer === mountedTrackingContainer
+    && session.isCurrentMount()
   );
 }
