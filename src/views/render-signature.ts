@@ -41,9 +41,11 @@ export function hashRenderInput(value: string): string {
 export function buildViewRenderSignature(pluginValue: unknown, view: object): string {
   const plugin = pluginValue as RenderSignaturePluginLike;
   const host = view as ViewLike;
-  const file = host.file;
-  const filePath = file?.path ?? '';
-  const headings = plugin.app?.metadataCache?.getFileCache?.(file)?.headings ?? [];
+  const file = host.file && typeof host.file === 'object' ? host.file : undefined;
+  const filePath = typeof file?.path === 'string' ? file.path : '';
+  const headings = filePath
+    ? (plugin.app?.metadataCache?.getFileCache?.(file)?.headings ?? [])
+    : [];
   const headingSignature = hashRenderInput(headings.map((heading) => (
     `${heading.level ?? ''}:${heading.heading ?? ''}:${heading.position?.start?.line ?? ''}`
   )).join('\u0001'));

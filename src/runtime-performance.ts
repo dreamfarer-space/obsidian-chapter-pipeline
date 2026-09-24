@@ -244,8 +244,10 @@ export function applyRuntimePerformancePatches(LegacyPlugin: LegacyPluginConstru
   const headingFingerprints = new WeakMap<object, Map<string, string>>();
   const originalExtractChapters = proto.extractChapters;
   proto.extractChapters = function patchedExtractChapters(content: string, file: any, parserSettings?: unknown) {
-    const filePath = file?.path || '';
-    const cachedHeadings = this.app?.metadataCache?.getFileCache?.(file)?.headings;
+    const filePath = typeof file?.path === 'string' ? file.path : '';
+    const cachedHeadings = filePath
+      ? this.app?.metadataCache?.getFileCache?.(file)?.headings
+      : undefined;
     const headings = Array.isArray(cachedHeadings) && cachedHeadings.length > 0
       ? cachedHeadings
       : fallbackHeadings(content);

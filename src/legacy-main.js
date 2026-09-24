@@ -1743,7 +1743,9 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   extractChapters(content, file, parserSettings = this.settings) {
-    const fileCache = this.app.metadataCache.getFileCache(file);
+    const fileCache = (file && typeof file.path === 'string' && this.app && this.app.metadataCache && typeof this.app.metadataCache.getFileCache === 'function')
+      ? this.app.metadataCache.getFileCache(file)
+      : null;
     let headings = fileCache ? fileCache.headings || [] : [];
 
     // 若缓存尚未就绪，使用正则极速从正文提取标题作为保底，确保任何模式百分百加载
