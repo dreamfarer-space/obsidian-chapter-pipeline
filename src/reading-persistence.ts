@@ -27,7 +27,11 @@ function filePathOf(fileOrPath: FileLike | string | null | undefined): string {
 }
 
 /** Remember a chapter snapshot in a small insertion-ordered LRU to bound long-session memory use. */
-function rememberFileChapterSnapshot(plugin: ReadingAwarePlugin, path: string, chapters: ChapterNode[]): void {
+export function rememberFileChapterSnapshot(
+  plugin: Pick<ReadingAwarePlugin, 'fileChapterSnapshots'>,
+  path: string,
+  chapters: ChapterNode[]
+): void {
   if (!path || !chapters?.length) return;
   plugin.fileChapterSnapshots ??= new Map<string, ChapterNode[]>();
   plugin.fileChapterSnapshots.delete(path);
@@ -146,27 +150,6 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
     }
     return this.settings?.readingState;
   };
-
-  const legacyAttach = prototype.attachStepperToView;
-  if (typeof legacyAttach === 'function') {
-    prototype.attachStepperToView = async function (this: ReadingAwarePlugin, view: object) {
-      const rendered = await legacyAttach.call(this, view) as { chapters?: ChapterNode[] } | undefined;
-      const typedView = view as { file?: FileLike };
-      const chapters = rendered?.chapters ?? this.viewChapterSnapshots?.get(view);
-      if (typedView.file?.path && chapters?.length) rememberFileChapterSnapshot(this, typedView.file.path, chapters);
-      return rendered;
-    };
-  }
-
-  const legacyGetAllChapters = prototype.getAllChaptersForView;
-  if (typeof legacyGetAllChapters === 'function') {
-    prototype.getAllChaptersForView = async function (this: ReadingAwarePlugin, view: object): Promise<ChapterNode[]> {
-      const chapters = await legacyGetAllChapters.call(this, view) as ChapterNode[];
-      const path = (view as { file?: FileLike })?.file?.path;
-      if (path && chapters.length) rememberFileChapterSnapshot(this, path, chapters);
-      return chapters;
-    };
-  }
 
   prototype.getChapterMarkers = function (this: ReadingAwarePlugin, file: FileLike, chapter: ChapterNode): ChapterMarker | null {
     if (!file || !chapter?.id) return null;
