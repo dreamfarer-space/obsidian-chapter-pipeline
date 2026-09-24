@@ -417,6 +417,10 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     if (!scroller) return super.getReadingHeading(view, chapter) ?? null;
 
     if (view && typeof view === 'object') {
+      const previousScroller = this.viewReadingScrollers.get(view);
+      if (previousScroller && previousScroller !== scroller) {
+        this.disconnectReadingHeadingObserver(previousScroller);
+      }
       this.viewReadingScrollers.set(view, scroller);
     }
 

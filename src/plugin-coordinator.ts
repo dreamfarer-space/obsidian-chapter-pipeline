@@ -1,5 +1,5 @@
 import { Plugin, MarkdownView, MarkdownRenderer, PluginSettingTab, Setting, SuggestModal, Menu, Notice } from 'obsidian';
-import { ChapterParser, ChapterParseCache } from './core/parser';
+import { ChapterParser, ChapterParseCache, normalizeHeadingText } from './core/parser';
 import { SoundEngine } from './core/sound';
 
 const DEFAULT_SETTINGS = {
@@ -698,17 +698,6 @@ function formatTitleForRender(title: any) {
     .replace(/^(\s*\d+)\.\s+/g, '$1\\. ')
     .replace(/^(\s*\d+)\)\s+/g, '$1\\) ')
     .replace(/^(\s*[-*+])\s+/g, '\\$1 ');
-}
-
-function normalizeHeadingText(text: any) {
-  if (!text) return '';
-  return String(text)
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/\[\[.*?\|(.*?)\]\]/g, '$1')
-    .replace(/\[\[(.*?)\]\]/g, '$1')
-    .replace(/\[status::.*?\]/gi, '')
-    .replace(/[\$#\*=`~_\[\]\(\)（）:：·、\.,，。!！\?？\\/+\-—\s\u200B-\u200D\uFEFF]/g, '')
-    .toLowerCase();
 }
 
 function createEmptyReadingState(): Record<string, any> {

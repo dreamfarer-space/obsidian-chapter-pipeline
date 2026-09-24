@@ -202,15 +202,13 @@ test('jumpToHeading stops stale or disconnected calibratePreview loops before mu
   assert.equal(frames.length, 0, 'disconnected previewScroller must not schedule another frame');
 });
 
-test('getReadingHeading skips signature check when MutationObserver exists and disconnects observer on view detach', () => {
+test('getReadingHeading skips signature check when MutationObserver exists, disconnects replaced scrollers, and cleans up via ViewSession.dispose()', async () => {
   const previousMutationObserver = global.MutationObserver;
   let disconnectedCount = 0;
-  let observerInstance = null;
 
   global.MutationObserver = class FakeObserver {
     constructor(cb) {
       this.cb = cb;
-      observerInstance = this;
     }
     observe() {}
     disconnect() {
@@ -219,21 +217,27 @@ test('getReadingHeading skips signature check when MutationObserver exists and d
   };
 
   try {
-    const heading = {
+    const makeHeading = (title) => ({
       tagName: 'H2',
-      textContent: 'Observed Heading',
+      textContent: title,
       isConnected: true,
       classList: { contains() { return false; } },
       getAttribute(name) {
         if (name === 'data-line') return '0';
-        if (name === 'data-heading') return 'Observed Heading';
+        if (name === 'data-heading') return title;
         return null;
       },
+      getBoundingClientRect() { return { top: 120, left: 0, right: 500, height: 30 }; },
       closest() { return null; },
-    };
+    });
 
-    const scroller = {
+    const makeScroller = (heading) => ({
+      scrollTop: 0,
+      scrollHeight: 1200,
+      clientHeight: 600,
       addEventListener() {},
+      removeEventListener() {},
+      getBoundingClientRect() { return { top: 100, left: 0, right: 500, height: 600 }; },
       get children() {
         throw new Error('getScrollerChildSignature must be skipped when observerState.observer exists');
       },
@@ -241,34 +245,109 @@ test('getReadingHeading skips signature check when MutationObserver exists and d
         return selector === 'h1, h2, h3, h4, h5, h6' ? [heading] : [];
       },
       querySelector() { return null; },
+    });
+
+    const firstHeading = makeHeading('First Heading');
+    const secondHeading = makeHeading('Second Heading');
+    const firstScroller = makeScroller(firstHeading);
+    const secondScroller = makeScroller(secondHeading);
+    let currentScroller = firstScroller;
+
+    const stepperEl = {
+      classList: { add() {}, remove() {}, contains() { return false; } },
+      style: { setProperty() {} },
+      setAttribute() {},
+      removeAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {},
+      remove() {},
+    };
+    const dashEl = {
+      classList: { add() {}, remove() {}, contains() { return false; } },
+      setAttribute() {},
+      removeAttribute() {},
+      getAttribute() { return null; },
+      addEventListener() {},
+      removeEventListener() {},
+    };
+    const container = {
+      clientWidth: 900,
+      querySelector(selector) {
+        if (selector === '.markdown-preview-view') return currentScroller;
+        if (selector === '.codex-stepper-container') return stepperEl;
+        return null;
+      },
+      querySelectorAll() { return []; },
     };
     const view = {
-      contentEl: {
-        querySelector(selector) {
-          return selector === '.markdown-preview-view' ? scroller : null;
-        },
-      },
+      file: { path: 'note.md' },
+      contentEl: container,
+      getMode: () => 'preview',
     };
 
     const plugin = new ChapterPipelinePlugin();
-    const resolved = plugin.getReadingHeading(view, {
-      title: 'Observed Heading',
-      rawHeading: 'Observed Heading',
+    const resolvedFirst = plugin.getReadingHeading(view, {
+      title: 'First Heading',
+      rawHeading: 'First Heading',
       level: 2,
       line: 0,
       headingIndex: 0,
     });
-    assert.equal(resolved, heading);
-    assert.ok(observerInstance, 'MutationObserver should be created for scroller');
-    assert.equal(plugin.readingHeadingObservers.has(scroller), true);
-    assert.equal(plugin.readingHeadingSnapshots.has(scroller), true);
+    assert.equal(resolvedFirst, firstHeading);
+    assert.equal(plugin.readingHeadingObservers.has(firstScroller), true);
+    assert.equal(plugin.readingHeadingSnapshots.has(firstScroller), true);
 
-    const coordinator = plugin.getSessionCoordinator();
-    coordinator.detach(view);
+    // Replace view's preview scroller and call getReadingHeading BEFORE attachStepperToView runs.
+    currentScroller = secondScroller;
+    const resolvedSecond = plugin.getReadingHeading(view, {
+      title: 'Second Heading',
+      rawHeading: 'Second Heading',
+      level: 2,
+      line: 0,
+      headingIndex: 0,
+    });
+    assert.equal(resolvedSecond, secondHeading);
+    assert.equal(disconnectedCount, 1, 'getReadingHeading must disconnect the previously mapped scroller observer');
+    assert.equal(plugin.readingHeadingObservers.has(firstScroller), false);
+    assert.equal(plugin.readingHeadingSnapshots.has(firstScroller), false);
+    assert.equal(plugin.readingHeadingObservers.has(secondScroller), true);
+    assert.equal(plugin.readingHeadingSnapshots.has(secondScroller), true);
 
-    assert.equal(disconnectedCount, 1, 'coordinator.detach(view) must disconnect the scroller MutationObserver');
-    assert.equal(plugin.readingHeadingObservers.has(scroller), false);
-    assert.equal(plugin.readingHeadingSnapshots.has(scroller), false);
+    // Stub compatibility renderer so attachStepperToView creates and adopts a real production ViewSession.
+    const baseProto = Object.getPrototypeOf(ChapterPipelinePlugin.ReadingPersistencePlugin.prototype);
+    const originalAttach = baseProto.attachStepperToView;
+    baseProto.attachStepperToView = async () => ({
+      hostContainer: container,
+      chapters: [{ id: 'h2:secondheading:0', title: 'Second Heading', rawHeading: 'Second Heading', level: 2, line: 0, headingIndex: 0, summaryMarkdown: '' }],
+      stepperElement: stepperEl,
+      dashElements: [dashEl],
+      tooltipElement: null,
+      railIndicator: null,
+      trackingContainer: secondScroller,
+      releaseLegacyScrollTracking() {},
+      isCurrentMount: () => true,
+      mode: 'reading',
+    });
+
+    try {
+      await plugin.attachStepperToView(view);
+      const session = plugin.getSessionCoordinator().get(view);
+      assert.ok(session, 'attachStepperToView should adopt a production ViewSession');
+
+      const countBeforeSessionDispose = disconnectedCount;
+      session.dispose();
+
+      assert.equal(
+        disconnectedCount,
+        countBeforeSessionDispose + 1,
+        'ViewSession.dispose() must disconnect the scroller MutationObserver'
+      );
+      assert.equal(plugin.readingHeadingObservers.has(secondScroller), false);
+      assert.equal(plugin.readingHeadingSnapshots.has(secondScroller), false);
+    } finally {
+      baseProto.attachStepperToView = originalAttach;
+    }
   } finally {
     global.MutationObserver = previousMutationObserver;
   }
