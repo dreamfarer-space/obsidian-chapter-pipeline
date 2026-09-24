@@ -149,11 +149,12 @@ export function installReadingIdentityPersistence(LegacyPlugin: LegacyPluginCons
 
   const legacyAttach = prototype.attachStepperToView;
   if (typeof legacyAttach === 'function') {
-    prototype.attachStepperToView = async function (this: ReadingAwarePlugin, view: object): Promise<void> {
-      await legacyAttach.call(this, view);
+    prototype.attachStepperToView = async function (this: ReadingAwarePlugin, view: object) {
+      const rendered = await legacyAttach.call(this, view) as { chapters?: ChapterNode[] } | undefined;
       const typedView = view as { file?: FileLike };
-      const chapters = this.viewChapterSnapshots?.get(view);
+      const chapters = rendered?.chapters ?? this.viewChapterSnapshots?.get(view);
       if (typedView.file?.path && chapters?.length) rememberFileChapterSnapshot(this, typedView.file.path, chapters);
+      return rendered;
     };
   }
 
