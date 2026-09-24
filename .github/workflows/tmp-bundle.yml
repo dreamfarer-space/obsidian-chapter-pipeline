@@ -1,0 +1,26 @@
+name: Temporary bundle artifact
+
+on:
+  push:
+    branches: [refactor/issue-32-session-coordinator]
+
+permissions:
+  contents: read
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: generated-main-js
+          path: main.js
+          if-no-files-found: error
