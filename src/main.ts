@@ -8,6 +8,7 @@ import {
   resolveChapterIdentity
 } from './core/reading-identity';
 import { installReadingIdentityPersistence } from './reading-persistence';
+import { SessionCoordinator } from './session-coordinator';
 import { LivePreviewTracker } from './views/live-preview-tracker';
 import { ReadingViewTracker } from './views/reading-view-tracker';
 import { buildViewRenderSignature, canReuseRenderedSession } from './views/render-signature';
@@ -30,8 +31,7 @@ interface ProductionPlugin {
   settings?: Record<string, unknown>;
   soundEngine?: { playScrollTick?: (volume: number) => void };
   scrollBindings?: Map<unknown, LegacyScrollBinding>;
-  viewSessions?: Map<object, ViewSession>;
-  viewSessionVersions?: Map<object, number>;
+  sessionCoordinator?: SessionCoordinator<object, ViewSession>;
   viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
   fileChapterSnapshots?: Map<string, ChapterNode[]>;
   viewTooltips?: Map<object, HTMLElement>;
@@ -58,6 +58,11 @@ const LegacyPlugin = require('./legacy-main.js') as {
 applyRuntimePerformancePatches(LegacyPlugin as never);
 installReadingIdentityPersistence(LegacyPlugin as never);
 
+function getSessionCoordinator(plugin: ProductionPlugin): SessionCoordinator<object, ViewSession> {
+  plugin.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>();
+  return plugin.sessionCoordinator;
+}
+
 /** Remove the compatibility renderer's scroll listener before typed tracking takes ownership. */
 function removeLegacyScrollBinding(plugin: ProductionPlugin, container: HTMLElement): void {
   const binding = plugin.scrollBindings?.get(container);
@@ -81,16 +86,11 @@ function installTypedProductionSessions(): void {
 
   /** Attach one generation-guarded typed session after the compatibility renderer finishes. */
   const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
-    this.viewSessions ??= new Map<object, ViewSession>();
-    this.viewSessionVersions ??= new Map<object, number>();
-    const sessionVersion = (this.viewSessionVersions.get(view) ?? 0) + 1;
-    this.viewSessionVersions.set(view, sessionVersion);
-
-    this.viewSessions.get(view)?.dispose();
-    this.viewSessions.delete(view);
+    const coordinator = getSessionCoordinator(this);
+    const sessionGeneration = coordinator.begin(view);
 
     await legacyAttach.call(this, view);
-    if (this.viewSessionVersions.get(view) !== sessionVersion) return;
+    if (!coordinator.isCurrent(view, sessionGeneration)) return;
 
     const typedView = view as { contentEl?: HTMLElement; file?: unknown };
     const container = typedView?.contentEl;
@@ -161,11 +161,12 @@ function installTypedProductionSessions(): void {
 
     const markdownLeaves = this.app?.workspace?.getLeavesOfType?.('markdown');
     const isMounted = markdownLeaves === undefined || markdownLeaves.some((leaf) => leaf?.view === view);
-    if (this.viewSessionVersions.get(view) !== sessionVersion || typedView.contentEl !== container || !isMounted) {
+    if (typedView.contentEl !== container || !isMounted) {
+      coordinator.detach(view);
       session.dispose();
       return;
     }
-    this.viewSessions.set(view, session);
+    coordinator.adopt(view, sessionGeneration, session);
   };
   (typedAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled = true;
   prototype.attachStepperToView = typedAttach;
@@ -173,17 +174,13 @@ function installTypedProductionSessions(): void {
   const legacyUpdateAllMarkdownViews = prototype.updateAllMarkdownViews;
   if (legacyUpdateAllMarkdownViews) {
     prototype.updateAllMarkdownViews = function (this: ProductionPlugin): void {
+      const coordinator = getSessionCoordinator(this);
       const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];
       const mountedViews = new Set<object>();
       leaves.forEach((leaf) => {
         if (leaf?.view && typeof leaf.view === 'object') mountedViews.add(leaf.view);
       });
-      this.viewSessions?.forEach((session, sessionView) => {
-        if (mountedViews.has(sessionView)) return;
-        session.dispose();
-        this.viewSessions?.delete(sessionView);
-        this.viewSessionVersions?.delete(sessionView);
-      });
+      coordinator.disposeUnmounted(mountedViews);
 
       leaves.forEach((leaf) => {
         const view = leaf?.view;
@@ -199,7 +196,7 @@ function installTypedProductionSessions(): void {
           : null;
         const renderSignature = buildViewRenderSignature(this, view);
         if (canReuseRenderedSession(
-          this.viewSessions?.get(view),
+          coordinator.get(view),
           renderSignature,
           mountedStepper,
           mountedTrackingContainer
@@ -211,9 +208,8 @@ function installTypedProductionSessions(): void {
 
   const legacyUnload = prototype.onunload;
   prototype.onunload = function (this: ProductionPlugin): void {
-    this.viewSessions?.forEach((session) => session.dispose());
-    this.viewSessions?.clear();
-    this.viewSessionVersions?.clear();
+    this.sessionCoordinator?.disposeAll();
+    this.sessionCoordinator = undefined;
     this.fileChapterSnapshots?.clear();
     legacyUnload?.call(this);
   };
@@ -230,6 +226,7 @@ PublicPlugin.ReadingStorage = ReadingStorage;
 PublicPlugin.ReadingViewTracker = ReadingViewTracker;
 PublicPlugin.LivePreviewTracker = LivePreviewTracker;
 PublicPlugin.ViewSession = ViewSession;
+PublicPlugin.SessionCoordinator = SessionCoordinator;
 PublicPlugin.StepperView = StepperView;
 PublicPlugin.TooltipManager = TooltipManager;
 PublicPlugin.TypedChapterSuggestModal = TypedChapterSuggestModal;
