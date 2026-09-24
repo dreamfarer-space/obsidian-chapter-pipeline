@@ -46,39 +46,35 @@ interface ProductionPlugin {
   recordReadingPosition?: (view: object, chapter: ChapterNode) => void;
 }
 
-// The legacy coordinator remains the compatibility boundary for product/UI
-// behavior while typed view sessions take over the real production scroll path.
-// eslint-disable-next-line @typescript-eslint/no-var-requires -- Keep the legacy coordinator as the CommonJS compatibility boundary until its migration is complete.
+// The legacy class remains a temporary compatibility base for product/UI
+// behavior. Typed production lifecycle now uses normal subclass overrides
+// instead of mutating that base prototype for session ownership.
+// eslint-disable-next-line @typescript-eslint/no-var-requires -- Keep the legacy coordinator as the CommonJS compatibility base until its migration is complete.
 const LegacyPlugin = require('./legacy-main.js') as {
   new (...args: unknown[]): ProductionPlugin;
-  prototype: ProductionPlugin & Record<string, unknown>;
-  ChapterParser?: typeof ChapterParser;
-  SoundEngine?: typeof SoundEngine;
-  updateHierarchyFolding?: typeof updateHierarchyFolding;
+  prototype: ProductionPlugin & {
+    attachStepperToView?: (view: object) => Promise<LegacyRenderResult | undefined | void>;
+    onunload?: () => void;
+  };
 };
 
 applyRuntimePerformancePatches(LegacyPlugin as never);
 installReadingIdentityPersistence(LegacyPlugin as never);
+
+const legacyAttach = LegacyPlugin.prototype.attachStepperToView;
+const legacyUnload = LegacyPlugin.prototype.onunload;
 
 function getSessionCoordinator(plugin: ProductionPlugin): SessionCoordinator<object, ViewSession> {
   plugin.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>();
   return plugin.sessionCoordinator;
 }
 
-/** Install typed per-view session ownership onto the legacy coordinator exactly once. */
-function installTypedProductionSessions(): void {
-  const prototype = LegacyPlugin.prototype as ProductionPlugin & {
-    attachStepperToView?: (view: object) => Promise<void>;
-    updateAllMarkdownViews?: () => void;
-    onunload?: () => void;
-  };
-  const legacyAttach = prototype.attachStepperToView as
-    | ((view: object) => Promise<LegacyRenderResult | undefined>)
-    | undefined;
-  if (!legacyAttach || (legacyAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled) return;
+/** Typed production subclass layered over the shrinking legacy compatibility base. */
+class TypedProductionPlugin extends LegacyPlugin {
+  /** Attach one generation-guarded typed session after compatibility rendering finishes. */
+  async attachStepperToView(view: object): Promise<void> {
+    if (!legacyAttach) return;
 
-  /** Attach one generation-guarded typed session after the compatibility renderer finishes. */
-  const typedAttach = async function (this: ProductionPlugin, view: object): Promise<void> {
     const coordinator = getSessionCoordinator(this);
     const sessionGeneration = coordinator.begin(view);
 
@@ -142,47 +138,40 @@ function installTypedProductionSessions(): void {
       return;
     }
     coordinator.adopt(view, sessionGeneration, session);
-  };
-  (typedAttach as { __typedSessionsInstalled?: boolean }).__typedSessionsInstalled = true;
-  prototype.attachStepperToView = typedAttach;
-
-  const legacyUpdateAllMarkdownViews = prototype.updateAllMarkdownViews;
-  if (legacyUpdateAllMarkdownViews) {
-    prototype.updateAllMarkdownViews = function (this: ProductionPlugin): void {
-      const coordinator = getSessionCoordinator(this);
-      const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];
-      const mountedViews = new Set<object>();
-      leaves.forEach((leaf) => {
-        if (leaf?.view && typeof leaf.view === 'object') mountedViews.add(leaf.view);
-      });
-      coordinator.disposeUnmounted(mountedViews);
-
-      leaves.forEach((leaf) => {
-        const view = leaf?.view;
-        if (!view || typeof view !== 'object') return;
-        const renderSignature = buildViewRenderSignature(this, view);
-        if (canReuseRenderedSession(coordinator.get(view), renderSignature)) return;
-        void prototype.attachStepperToView?.call(this, view);
-      });
-    };
   }
 
-  const legacyUnload = prototype.onunload;
-  prototype.onunload = function (this: ProductionPlugin): void {
+  /** Refresh only views whose structural signature or mounted resources changed. */
+  updateAllMarkdownViews(): void {
+    const coordinator = getSessionCoordinator(this);
+    const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];
+    const mountedViews = new Set<object>();
+    leaves.forEach((leaf) => {
+      if (leaf?.view && typeof leaf.view === 'object') mountedViews.add(leaf.view);
+    });
+    coordinator.disposeUnmounted(mountedViews);
+
+    leaves.forEach((leaf) => {
+      const view = leaf?.view;
+      if (!view || typeof view !== 'object') return;
+      const renderSignature = buildViewRenderSignature(this, view);
+      if (canReuseRenderedSession(coordinator.get(view), renderSignature)) return;
+      void this.attachStepperToView(view);
+    });
+  }
+
+  /** Dispose typed session resources before delegating to the compatibility base unload. */
+  onunload(): void {
     this.sessionCoordinator?.disposeAll();
     this.sessionCoordinator = undefined;
     this.fileChapterSnapshots?.clear();
     legacyUnload?.call(this);
-  };
+  }
 }
 
-installTypedProductionSessions();
-
-LegacyPlugin.ChapterParser = ChapterParser;
-LegacyPlugin.SoundEngine = SoundEngine;
-LegacyPlugin.updateHierarchyFolding = updateHierarchyFolding;
-
-const PublicPlugin = LegacyPlugin as typeof LegacyPlugin & Record<string, unknown>;
+const PublicPlugin = TypedProductionPlugin as typeof TypedProductionPlugin & Record<string, unknown>;
+PublicPlugin.ChapterParser = ChapterParser;
+PublicPlugin.SoundEngine = SoundEngine;
+PublicPlugin.updateHierarchyFolding = updateHierarchyFolding;
 PublicPlugin.ReadingStorage = ReadingStorage;
 PublicPlugin.ReadingViewTracker = ReadingViewTracker;
 PublicPlugin.LivePreviewTracker = LivePreviewTracker;
@@ -197,4 +186,4 @@ PublicPlugin.createChapterMarkerKey = createChapterMarkerKey;
 PublicPlugin.resolveChapterIdentity = resolveChapterIdentity;
 PublicPlugin.normalizeChapterIdentity = normalizeChapterIdentity;
 
-export = LegacyPlugin;
+export = TypedProductionPlugin;
