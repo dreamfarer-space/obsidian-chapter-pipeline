@@ -34,10 +34,18 @@ When the minimum-version claim or runtime implementation changes materially, rer
 
 Mobile support can be enabled later by setting `isDesktopOnly: false` only after Android and iOS/iPadOS smoke tests cover narrow-view hiding, touch tooltip activation, chapter navigation, palette use, rotation/resume, and plugin reload.
 
+## Obsidian review lint
+
+Run `npm run lint:obsidian` before submission. The command runs the current Obsidian-specific ESLint rules against production source using an isolated, pinned review toolchain. The isolation is intentional: Chapter Pipeline currently builds with TypeScript 7, while the current `typescript-eslint` release used by the Obsidian lint ecosystem supports TypeScript versions below 6.1.
+
+The lint runner follows the Community Plugin scanner's documented source-oriented ignore model and severity policy: generated bundles, tests, build scripts, documentation, localization, and vault fixtures are excluded; most code-quality findings remain advisory warnings; security-critical findings stay blocking errors; and scanner-disabled high-noise rules remain disabled. Blocking lint errors fail the command and therefore fail CI. Rule suppressions should stay narrow and include a reason at the use site rather than disabling Obsidian review rules globally.
+
+Release metadata remains covered separately by `scripts/validate-release.mjs` and the existing release checks below.
+
 ## Pre-submission release checks
 
 1. Confirm `manifest.json`, `package.json`, and `versions.json` agree on the release version and compatibility mapping.
-2. Run `npm ci`, `npm audit --audit-level=moderate`, `npx --no-install tsc --noEmit`, `npm test`, and `npm run build`.
+2. Run `npm ci`, `npm audit --audit-level=moderate`, `npx --no-install tsc --noEmit`, `npm run lint:obsidian`, `npm test`, and `npm run build`.
 3. Confirm the committed `main.js` matches the production build.
 4. Confirm runtime source and the production bundle contain no legacy `Pro` startup/debug branding and use the final `Chapter Pipeline` display name.
 5. Confirm the GitHub release tag exactly matches `manifest.json.version` and includes `main.js`, `manifest.json`, and `styles.css` as individual assets.
@@ -52,6 +60,7 @@ Mobile support can be enabled later by setting `isDesktopOnly: false` only after
 - Release lineage: exact no-prefix tags are used for current releases; historical `v1.2.1` / `1.2.1` collision is retained only as repository history.
 - Release tag/assets: automated and available.
 - Pre-approval installation docs: BRAT/manual path documented.
+- Obsidian review lint: available locally through `npm run lint:obsidian` and enforced by CI.
 - Mobile claim: disabled conservatively with `isDesktopOnly: true` until explicit mobile testing exists.
 - Declared minimum Obsidian version: `0.15.9`.
 - Latest recorded real-app compatibility evidence: `1.2.2` package passed the desktop smoke matrix on Obsidian `0.15.9` and `1.13.7`.
