@@ -10,25 +10,25 @@ This document is the authoritative repository record for the current release sta
 - Current release: `1.2.3`
 - Required release assets: `main.js`, `manifest.json`, `styles.css`
 - Release tag: exactly the version from `manifest.json` (for example `1.2.3`, with no `v` prefix)
-- Declared minimum Obsidian version: `0.15.9`
+- Declared minimum Obsidian version: `1.8.7`
 - Declared platforms: desktop only (`isDesktopOnly: true`)
 
 The plugin ID remains `chapter-pipeline`. It is the existing identifier and is aligned with the final Chapter Pipeline product/repository name. Do not change it after publication.
 
-`manifest.json`, `package.json`, and `versions.json` currently agree on release `1.2.3`; `versions.json` maps `1.2.3` to Obsidian `0.15.9`.
+`manifest.json`, `package.json`, and `versions.json` currently agree on release `1.2.3`; `versions.json` maps `1.2.3` to Obsidian `1.8.7`.
 
 ## Real-app compatibility evidence
 
-The most recent recorded real-app smoke run was performed on 2026-09-23 against the packaged `1.2.2` plugin files (`main.js`, `manifest.json`, `styles.css`). The package was loaded into isolated vaults using official Linux AppImages under Xvfb, with Restricted Mode disabled through Obsidian's plugin manager before loading the community plugin.
+The most recent recorded real-app smoke run was performed on 2026-09-25 against the packaged `1.2.3` plugin files (`main.js`, `manifest.json`, `styles.css`). The package was loaded into isolated vaults using official Linux AppImages under Xvfb, with Restricted Mode disabled through Obsidian's plugin manager before loading the community plugin.
 
 | Environment | Verification | Result |
 | --- | --- | --- |
-| Obsidian Desktop 0.15.9 | Plugin load; Reading View chapter rail; editor/Live Preview chapter rail; command registration; unload/reload | **PASS** (`1.2.2` package) |
-| Obsidian Desktop 1.13.7 | Plugin load; Reading View chapter rail; editor/Live Preview chapter rail; command registration; unload/reload | **PASS** (`1.2.2` package) |
+| Obsidian Desktop 1.8.7 | Plugin load; Reading View chapter rail; editor/Live Preview chapter rail; command registration; unload/reload | **PASS** (`1.2.3` package) |
+| Obsidian Desktop 1.13.7 | Plugin load; Reading View chapter rail; editor/Live Preview chapter rail; command registration; unload/reload | **PASS** (`1.2.3` package) |
 | Android | Mobile support is intentionally not claimed yet | Deferred; `isDesktopOnly: true` |
 | iOS/iPadOS | Mobile support is intentionally not claimed yet | Deferred; `isDesktopOnly: true` |
 
-Release `1.2.3` keeps the same plugin ID, declared minimum Obsidian version, and desktop-only platform policy as `1.2.2`, while adding review-blocker/UI implementation fixes and refreshed release metadata. It is therefore the current release, but the table above should not be misread as a separate real-app smoke run of the `1.2.3` package.
+Release `1.2.3` updates `minAppVersion` to `1.8.7` to adopt Obsidian's native `getLanguage()` API while eliminating `window.localStorage` usage, maintains the same plugin ID and desktop-only platform policy, and resolves Obsidian Community Plugin review findings and lint warnings.
 
 When the minimum-version claim or runtime implementation changes materially, rerun the real-app smoke matrix against the exact release candidate package and update this section.
 
