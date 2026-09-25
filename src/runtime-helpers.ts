@@ -25,7 +25,7 @@ const FNV_PRIME = 0x01000193;
 export function hashHeadingSequence(headings: HeadingSequenceItem[] = []): string {
   let hash = FNV_OFFSET_BASIS;
 
-  const mix = (value: unknown): void => {
+  const mix = (value: string | number | boolean | null | undefined): void => {
     const text = String(value ?? '');
     for (let i = 0; i < text.length; i += 1) {
       hash ^= text.charCodeAt(i);

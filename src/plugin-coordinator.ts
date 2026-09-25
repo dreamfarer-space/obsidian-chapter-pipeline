@@ -1,6 +1,8 @@
 import { Plugin, MarkdownView, MarkdownRenderer, PluginSettingTab, Setting, SuggestModal, Menu, Notice } from 'obsidian';
+import { getLocale } from './constants';
 import { ChapterParser, ChapterParseCache, normalizeHeadingText } from './core/parser';
 import { SoundEngine } from './core/sound';
+import type { PluginSettings } from './types';
 
 const DEFAULT_SETTINGS = {
   minHeadingLevel: 1,
@@ -196,10 +198,7 @@ const I18N: Record<string, any> = {
   }
 };
 
-function getLocale() {
-  const lang = (typeof window !== 'undefined' && window.localStorage ? window.localStorage.getItem('language') : null) || (typeof navigator !== 'undefined' ? navigator.language : 'en') || 'en';
-  return String(lang).toLowerCase().startsWith('zh') ? 'zh' : 'en';
-}
+
 
 function t(key: any, variables: any = {}) {
   const localeStrings = I18N[getLocale()] || I18N.en;
@@ -451,7 +450,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
 
     const strings = I18N[getLocale()] || I18N.en;
 
-    containerEl.createEl('h2', { text: strings.tabTitle });
+    new Setting(containerEl).setName(strings.tabTitle).setHeading();
 
     new Setting(containerEl)
       .setName(strings.showExcerptName)
@@ -567,7 +566,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
           })
       );
 
-    containerEl.createEl('h3', { text: strings.readingSectionTitle });
+    new Setting(containerEl).setName(strings.readingSectionTitle).setHeading();
 
     new Setting(containerEl)
       .setName(strings.readingBookmarksEnabledName)
@@ -597,7 +596,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
         );
     }
 
-    const levelSetting = new Setting(containerEl)
+    new Setting(containerEl)
       .setName(strings.maxLevelName)
       .setDesc(strings.maxLevelDesc)
       .addDropdown((drop: any) => {
@@ -659,7 +658,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
           })
       );
 
-    containerEl.createEl('h3', { text: strings.soundSectionTitle });
+    new Setting(containerEl).setName(strings.soundSectionTitle).setHeading();
 
     new Setting(containerEl)
       .setName(strings.enableSoundName)
@@ -711,7 +710,7 @@ function normalizeReadingState(readingState: any) {
     : null;
   if (!files || typeof files !== 'object' || Array.isArray(files)) return normalized;
 
-  for (const [path, rawFileState] of Object.entries(files) as [string, any][]) {
+  for (const [path, rawFileState] of Object.entries(files)) {
     if (!path || !rawFileState || typeof rawFileState !== 'object' || Array.isArray(rawFileState)) continue;
 
     const fileState: Record<string, any> = { markers: {} };
@@ -726,7 +725,7 @@ function normalizeReadingState(readingState: any) {
 
     const rawMarkers = rawFileState.markers;
     if (rawMarkers && typeof rawMarkers === 'object' && !Array.isArray(rawMarkers)) {
-      for (const [chapterId, rawMarker] of Object.entries(rawMarkers) as [string, any][]) {
+      for (const [chapterId, rawMarker] of Object.entries(rawMarkers)) {
         if (!chapterId || !rawMarker || typeof rawMarker !== 'object' || Array.isArray(rawMarker)) continue;
         const marker = {
           revisit: rawMarker.revisit === true,
@@ -748,21 +747,19 @@ function normalizeReadingState(readingState: any) {
 
 class ChapterPipelinePlugin extends Plugin {
   [key: string]: any;
-  declare app: any;
-  declare manifest: any;
   observers: Map<any, any>;
   viewObservers: Map<any, any>;
   renderVersions: Map<any, any>;
   scrollBindings: Map<any, any>;
   viewTooltips: Map<any, any>;
   viewChapterSnapshots: WeakMap<object, any>;
-  soundEngine: any;
-  chapterCache: any;
+  soundEngine: SoundEngine;
+  chapterCache: ChapterParseCache;
   documentRevisions: Map<string, number>;
-  settings: any;
-  refreshFrame: any;
-  refreshTimer: any;
-  readingSaveTimer: any;
+  settings: PluginSettings;
+  refreshFrame: number | null;
+  refreshTimer: number | null;
+  readingSaveTimer: number | null;
   resumePromptedPaths: Set<string>;
   pendingFrames: Set<number>;
   tooltipCounter: number;
@@ -793,7 +790,7 @@ class ChapterPipelinePlugin extends Plugin {
   /** Track every deferred frame so split views can be torn down without stale callbacks. */
   scheduleFrame(callback: any) {
     let frameId: any = null;
-    frameId = requestAnimationFrame(() => {
+    frameId = window.requestAnimationFrame(() => {
       if (frameId !== null) this.pendingFrames.delete(frameId);
       callback();
     });
@@ -862,8 +859,8 @@ class ChapterPipelinePlugin extends Plugin {
             this.documentRevisions.set(info.file.path, (this.documentRevisions.get(info.file.path) || 0) + 1);
             this.chapterCache.deleteByPrefix(`${info.file.path}|`);
           }
-          if (editorChangeTimeout) clearTimeout(editorChangeTimeout);
-          editorChangeTimeout = setTimeout(() => {
+          if (editorChangeTimeout) window.clearTimeout(editorChangeTimeout);
+          editorChangeTimeout = window.setTimeout(() => {
             if (info && info.file) {
               const activeView = this.app.workspace?.getActiveViewOfType ? this.app.workspace.getActiveViewOfType(MarkdownView) : null;
               if (activeView && activeView.file && activeView.file.path === info.file.path) {
@@ -1165,9 +1162,9 @@ class ChapterPipelinePlugin extends Plugin {
 
   scheduleReadingStateSave() {
     if (this.readingSaveTimer !== null) {
-      clearTimeout(this.readingSaveTimer);
+      window.clearTimeout(this.readingSaveTimer);
     }
-    this.readingSaveTimer = setTimeout(() => {
+    this.readingSaveTimer = window.setTimeout(() => {
       this.readingSaveTimer = null;
       this.saveSettings().catch(() => {});
     }, 350);
@@ -1190,12 +1187,16 @@ class ChapterPipelinePlugin extends Plugin {
     if (container && typeof container.contains === 'function') {
       try {
         if (container.contains(target)) return true;
-      } catch (e) {}
+      } catch {
+        /* ignore DOM exception */
+      }
     }
     if (view?.containerEl && typeof view.containerEl.contains === 'function') {
       try {
         if (view.containerEl.contains(target)) return true;
-      } catch (e) {}
+      } catch {
+        /* ignore DOM exception */
+      }
     }
 
     // Tree walk fallback via parentElement
@@ -1220,7 +1221,9 @@ class ChapterPipelinePlugin extends Plugin {
     if (typeof target.contains === 'function') {
       try {
         if (target.contains(container)) return true;
-      } catch (e) {}
+      } catch {
+        /* ignore DOM exception */
+      }
     }
 
     return false;
@@ -1367,7 +1370,7 @@ class ChapterPipelinePlugin extends Plugin {
     const merged: Record<string, any> = { markers: {} };
     const states = [destinationState, sourceState].filter(Boolean);
     for (const state of states) {
-      for (const [chapterId, marker] of Object.entries(state.markers || {}) as [string, any][]) {
+      for (const [chapterId, marker] of Object.entries(state.markers || {})) {
         const current = merged.markers[chapterId] || { revisit: false, important: false };
         current.revisit = current.revisit || marker.revisit === true;
         current.important = current.important || marker.important === true;
@@ -1418,7 +1421,7 @@ class ChapterPipelinePlugin extends Plugin {
     this.updateAllMarkdownViews();
 
     if (this.refreshFrame !== null) {
-      cancelAnimationFrame(this.refreshFrame);
+      window.cancelAnimationFrame(this.refreshFrame);
     }
     this.refreshFrame = this.scheduleFrame(() => {
       this.refreshFrame = null;
@@ -1426,9 +1429,9 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     if (this.refreshTimer !== null) {
-      clearTimeout(this.refreshTimer);
+      window.clearTimeout(this.refreshTimer);
     }
-    this.refreshTimer = setTimeout(() => {
+    this.refreshTimer = window.setTimeout(() => {
       this.refreshTimer = null;
       this.updateAllMarkdownViews();
     }, 180);
@@ -1823,12 +1826,6 @@ class ChapterPipelinePlugin extends Plugin {
       if (railIndicator && height) railIndicator.style.height = height;
     };
 
-    const updateRailIndicator = (idx: any) => {
-      // Keep the legacy helper for callers, but perform its geometry read before
-      // the next batch of class/style writes whenever possible.
-      applyRailIndicator(measureRailIndicator(idx));
-    };
-
     chapters.forEach((chap: any, i: any) => {
       const dashItem = track.createDiv({
         cls: `codex-dash-item level-${Math.min(chap.level, 6)}`,
@@ -1870,12 +1867,12 @@ class ChapterPipelinePlugin extends Plugin {
           text: `H${chap.level}`
         });
         const titleEl = headerEl.createDiv({ cls: 'codex-tooltip-title' });
-        MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', this);
+        void MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', view);
 
         // 正文 3 行纯文本摘要（支持 KaTeX 公式渲染，彻底过滤 Callout 容器）
         if (this.settings.showExcerpt !== false && chap.summaryMarkdown) {
           const excerptEl = floatingTooltip.createDiv({ cls: 'codex-tooltip-excerpt' });
-          MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', this);
+          void MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', view);
         }
 
         const statuses = this.getChapterStatusLabels(file, chap);
@@ -1950,7 +1947,7 @@ class ChapterPipelinePlugin extends Plugin {
 
       const navigateToChapter = () => {
         isClickScrolling = true;
-        if (clickTimeout) clearTimeout(clickTimeout);
+        if (clickTimeout) window.clearTimeout(clickTimeout);
 
         const railHeight = measureRailIndicator(i);
         dashElements.forEach((d: any) => d.classList.remove('active'));
@@ -1967,7 +1964,7 @@ class ChapterPipelinePlugin extends Plugin {
         this.recordReadingPosition(view, chap);
         this.jumpToHeading(view, chap);
 
-        clickTimeout = setTimeout(() => {
+        clickTimeout = window.setTimeout(() => {
           isClickScrolling = false;
         }, 600);
       };
@@ -2463,7 +2460,7 @@ class ChapterPipelinePlugin extends Plugin {
         }
         return closestLine;
       }
-    } catch (e) {
+    } catch {
       // ignore
     }
     return 0;
@@ -2474,7 +2471,7 @@ class ChapterPipelinePlugin extends Plugin {
     if (!scroller || !chapters.length) return null;
     const scrollerRect = scroller.getBoundingClientRect();
     const activeBaseline = scrollerRect.top + 70;
-    const renderedLines = Array.from(container.querySelectorAll('.cm-line, .cm-heading')) as any[];
+    const renderedLines = Array.from(container.querySelectorAll('.cm-line, .cm-heading'));
     let closestLine = null;
     let closestTop = -Infinity;
 
@@ -2535,7 +2532,7 @@ class ChapterPipelinePlugin extends Plugin {
         targetView.setEphemeralState(subpath ? { subpath, line, focus: false } : { line, focus: false });
       }
       this.clearFlashHighlights(targetView.contentEl);
-    } catch (e) {
+    } catch {
       // ignore
     }
 
@@ -2625,7 +2622,7 @@ class ChapterPipelinePlugin extends Plugin {
             scroller.scrollTop = Math.max(0, block.top - 20);
           }
         }
-      } catch (e) {
+      } catch {
         if (editor) {
           editor.scrollIntoView({ from: { line: line, ch: 0 }, to: { line: line, ch: 0 } }, false);
         }
@@ -2653,7 +2650,7 @@ class ChapterPipelinePlugin extends Plugin {
                   scroller.scrollTop = Math.max(0, freshBlock.top - 20);
                 }
               }
-            } catch (err) {
+            } catch {
               // ignore
             }
           }
@@ -2678,19 +2675,19 @@ class ChapterPipelinePlugin extends Plugin {
       this.soundEngine.destroy();
     }
     if (this.refreshFrame !== null) {
-      cancelAnimationFrame(this.refreshFrame);
+      window.cancelAnimationFrame(this.refreshFrame);
       this.refreshFrame = null;
     }
     if (this.pendingFrames) {
-      this.pendingFrames.forEach((frameId: any) => cancelAnimationFrame(frameId));
+      this.pendingFrames.forEach((frameId: any) => window.cancelAnimationFrame(frameId));
       this.pendingFrames.clear();
     }
     if (this.refreshTimer !== null) {
-      clearTimeout(this.refreshTimer);
+      window.clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
     if (this.readingSaveTimer !== null) {
-      clearTimeout(this.readingSaveTimer);
+      window.clearTimeout(this.readingSaveTimer);
       this.readingSaveTimer = null;
       this.saveSettings().catch(() => {});
     }

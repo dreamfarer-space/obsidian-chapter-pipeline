@@ -4,6 +4,30 @@ const path = require('node:path');
 const test = require('node:test');
 const { buildSync } = require('esbuild');
 
+const originalLoad = Module._load;
+Module._load = function loadWithObsidianStub(request, parent, isMain) {
+  if (request === 'obsidian') {
+    return {
+      getLanguage: () => 'en',
+    };
+  }
+  return originalLoad.call(this, request, parent, isMain);
+};
+
+global.window = global.window || {};
+global.createEl = (tag) => ({
+  tagName: tag,
+  classList: { add() {}, remove() {}, contains() { return false; } },
+  setAttribute() {},
+  getAttribute() { return null; },
+  style: {},
+  children: [],
+  append() {},
+  replaceChildren() {},
+  addEventListener() {},
+  removeEventListener() {},
+});
+
 function loadViewSessionModule() {
   const filename = path.join(__dirname, '../src/views/view-session.ts');
   const result = buildSync({

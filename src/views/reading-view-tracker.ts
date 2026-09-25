@@ -28,7 +28,7 @@ export class ReadingViewTracker {
 
   setChapters(chapters: ChapterNode[]): void {
     this.chapters = chapters;
-    this.headingCache = new Array(chapters.length);
+    this.headingCache = new Array<Element | null | undefined>(chapters.length);
     this.lastActiveIndex = -1;
     if (this.options.trackImmediately !== false) this.schedule();
   }
@@ -48,7 +48,7 @@ export class ReadingViewTracker {
   private schedule(): void {
     if (this.frame !== null || this.disposed || !this.canTrack()) return;
     let executedSynchronously = false;
-    const frame = requestAnimationFrame(() => {
+    const frame = window.requestAnimationFrame(() => {
       executedSynchronously = true;
       this.frame = null;
       if (this.canTrack()) this.update();
@@ -126,7 +126,7 @@ export class ReadingViewTracker {
   dispose(): void {
     this.disposed = true;
     this.options.container.removeEventListener('scroll', this.handleScroll);
-    if (this.frame !== null) cancelAnimationFrame(this.frame);
+    if (this.frame !== null) window.cancelAnimationFrame(this.frame);
     this.frame = null;
     this.headingCache = [];
   }

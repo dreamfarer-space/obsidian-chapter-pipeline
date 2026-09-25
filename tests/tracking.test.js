@@ -22,6 +22,7 @@ Module._load = function loadWithObsidianStub(request, parent, isMain) {
       SuggestModal,
       Menu,
       Notice,
+      getLanguage: () => 'en',
     };
   }
   return originalLoad.call(this, request, parent, isMain);
@@ -32,14 +33,19 @@ Module._load = originalLoad;
 function installRafHarness() {
   let nextId = 1;
   let queue = [];
-  global.requestAnimationFrame = (callback) => {
+  const raf = (callback) => {
     const id = nextId++;
     queue.push({ id, callback });
     return id;
   };
-  global.cancelAnimationFrame = (id) => {
+  const caf = (id) => {
     queue = queue.filter((entry) => entry.id !== id);
   };
+  global.requestAnimationFrame = raf;
+  global.cancelAnimationFrame = caf;
+  global.window = global.window || {};
+  global.window.requestAnimationFrame = raf;
+  global.window.cancelAnimationFrame = caf;
   return () => {
     const pending = queue;
     queue = [];

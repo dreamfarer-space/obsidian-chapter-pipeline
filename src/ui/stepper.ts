@@ -14,7 +14,7 @@ export function updateHierarchyFolding(
   chapters: ChapterNode[],
   dashElements: HierarchyElement[],
   activeIdx: number,
-  hierarchyMode: HierarchyMode | string = 'all',
+  hierarchyMode: HierarchyMode = 'all',
   keyboardExpanded = false,
   pointerExpanded = false
 ): void {
@@ -145,7 +145,7 @@ export class StepperView {
     this.options = options;
     this.adopted = Boolean(options.existingElement);
     this.hierarchyMode = options.hierarchyMode ?? 'all';
-    this.element = options.existingElement ?? document.createElement('nav');
+    this.element = options.existingElement ?? createEl('nav');
     this.progressIndicator = options.existingProgressIndicator ?? null;
 
     if (this.adopted) {
@@ -168,7 +168,7 @@ export class StepperView {
     this.element.replaceChildren();
     this.dashElements.length = 0;
     for (const chapter of this.options.chapters) {
-      const dash = document.createElement('button');
+      const dash = createEl('button');
       dash.type = 'button';
       dash.className = `${DOM_CLASSES.dash} level-${Math.min(6, Math.max(1, chapter.level))}`;
       dash.setAttribute('aria-label', `Chapter: ${chapter.title}`);
@@ -195,21 +195,20 @@ export class StepperView {
 
   private syncProgress(): void {
     if (!this.progressIndicator) return;
+    let height: string;
     if (this.options.chapters.length <= 1) {
-      this.progressIndicator.style.height = '100%';
-      return;
+      height = `${100}%`;
+    } else if (this.activeIndex < 0 || this.activeIndex >= this.options.chapters.length) {
+      height = `${0}%`;
+    } else {
+      const activeItem = this.dashElements[this.activeIndex];
+      const offsetTop = Number(activeItem?.offsetTop) || 0;
+      const offsetHeight = Number(activeItem?.offsetHeight) || 10;
+      height = offsetTop > 0
+        ? `${offsetTop + (offsetHeight / 2)}px`
+        : `${Math.round((this.activeIndex / (this.options.chapters.length - 1)) * 100)}%`;
     }
-    if (this.activeIndex < 0 || this.activeIndex >= this.options.chapters.length) {
-      this.progressIndicator.style.height = '0%';
-      return;
-    }
-
-    const activeItem = this.dashElements[this.activeIndex];
-    const offsetTop = Number(activeItem?.offsetTop) || 0;
-    const offsetHeight = Number(activeItem?.offsetHeight) || 10;
-    this.progressIndicator.style.height = offsetTop > 0
-      ? `${offsetTop + (offsetHeight / 2)}px`
-      : `${Math.round((this.activeIndex / (this.options.chapters.length - 1)) * 100)}%`;
+    this.progressIndicator.style.height = height;
   }
 
   private syncHierarchy(): void {

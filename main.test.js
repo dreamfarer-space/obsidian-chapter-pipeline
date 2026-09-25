@@ -283,14 +283,29 @@ class Setting {
 
   constructor(containerEl) {
     this.containerEl = containerEl;
+    this.settingEl = containerEl && typeof containerEl.createDiv === 'function'
+      ? containerEl.createDiv({ cls: 'setting-item' })
+      : null;
     this.name = '';
     this.desc = '';
     this.controls = [];
+    this.isHeading = false;
     Setting.instances.push(this);
   }
 
   setName(name) {
     this.name = name;
+    if (this.settingEl) {
+      this.settingEl.textContent = name;
+    }
+    return this;
+  }
+
+  setHeading() {
+    this.isHeading = true;
+    if (this.settingEl) {
+      this.settingEl.addClass('setting-item-heading');
+    }
     return this;
   }
 
@@ -364,6 +379,20 @@ class Setting {
   }
 }
 
+global.createEl = (tag, options = {}) => {
+  const el = new FakeElement({
+    tagName: tag,
+    textContent: options?.text || options?.textContent || '',
+    classes: String(options?.cls || '').split(/\s+/).filter(Boolean),
+  });
+  for (const [name, value] of Object.entries(options?.attr || {})) {
+    el.setAttribute(name, value);
+  }
+  return el;
+};
+global.createDiv = (options = {}) => global.createEl('div', options);
+global.createSpan = (options = {}) => global.createEl('span', options);
+
 const originalLoad = Module._load;
 Module._load = function loadWithObsidianStub(request, parent, isMain) {
   if (request === 'obsidian') {
@@ -385,6 +414,7 @@ Module._load = function loadWithObsidianStub(request, parent, isMain) {
       SuggestModal,
       Menu,
       Notice,
+      getLanguage: () => (global.window && global.window.localStorage && global.window.localStorage.getItem && global.window.localStorage.getItem('language')) || 'en',
     };
   }
   return originalLoad.call(this, request, parent, isMain);
@@ -407,6 +437,13 @@ function createReadingHarness() {
     innerWidth: 1200,
     innerHeight: 800,
     localStorage: { getItem: () => 'en' },
+    setTimeout: (...args) => global.setTimeout(...args),
+    clearTimeout: (...args) => global.clearTimeout(...args),
+    requestAnimationFrame: (callback) => {
+      callback();
+      return 1;
+    },
+    cancelAnimationFrame: () => {},
   };
   Menu.instances = [];
   Notice.instances = [];
@@ -430,6 +467,7 @@ function createReadingHarness() {
     callback();
     return 1;
   };
+  global.cancelAnimationFrame = () => {};
 
   const container = new FakeElement();
   const sourceScroller = container.append(new FakeElement({ classes: ['cm-scroller'] }));
@@ -983,7 +1021,7 @@ test('ChapterPipelineSettingTab renders all controls and updates settings', asyn
   await glassControl.changeHandler(false);
   assert.equal(plugin.settings.tooltipGlassmorphism, false);
 
-  const readingSetting = Setting.instances.find(s => s.name.includes('Reading Progress') || s.name.includes('阅读断点'));
+  const readingSetting = Setting.instances.find(s => s.controls.length > 0 && (s.name.includes('Reading Progress') || s.name.includes('阅读断点')));
   assert.ok(readingSetting, 'reading progress toggle setting should be rendered');
   const readingControl = readingSetting.controls[0];
   assert.equal(readingControl.value, false);

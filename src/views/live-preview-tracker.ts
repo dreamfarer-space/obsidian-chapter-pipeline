@@ -94,7 +94,7 @@ export class LivePreviewTracker {
   private readonly schedule = (): void => {
     if (this.frame !== null || this.disposed || !this.canTrack()) return;
     let executedSynchronously = false;
-    const frame = requestAnimationFrame(() => {
+    const frame = window.requestAnimationFrame(() => {
       executedSynchronously = true;
       this.frame = null;
       if (this.canTrack()) this.update();
@@ -240,7 +240,7 @@ export class LivePreviewTracker {
     this.disposed = true;
     this.options.container.removeEventListener('scroll', this.schedule);
     this.observer?.disconnect();
-    if (this.frame !== null) cancelAnimationFrame(this.frame);
+    if (this.frame !== null) window.cancelAnimationFrame(this.frame);
     this.frame = null;
     this.renderedLines = [];
     this.chapterLineOrder = [];

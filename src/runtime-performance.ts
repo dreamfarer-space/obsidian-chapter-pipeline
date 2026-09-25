@@ -1,4 +1,5 @@
 import { Setting } from 'obsidian';
+import { getLocale } from './constants';
 import { normalizeHeadingText } from './core/parser';
 import { ChapterPipelineCoordinator } from './plugin-coordinator';
 import {
@@ -47,11 +48,7 @@ function fallbackHeadings(content: string): Array<{ heading: string; level: numb
 }
 
 function isChineseLocale(): boolean {
-  const language = (typeof window !== 'undefined' && window.localStorage)
-    ? window.localStorage.getItem('language')
-    : null;
-  const fallback = typeof navigator !== 'undefined' ? navigator.language : 'en';
-  return String(language || fallback || 'en').toLowerCase().startsWith('zh');
+  return getLocale() === 'zh';
 }
 
 function isUsableReadingHeading(element: Element): boolean {
@@ -233,13 +230,13 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
       observer.observe(scroller, { childList: true, subtree: true });
       state.observer = observer;
 
-      const mockScroller = scroller as Element & {
-        append?: (...args: unknown[]) => unknown;
+      const mockScroller = scroller as unknown as {
+        append?: (this: unknown, ...args: unknown[]) => unknown;
       };
       if (typeof Node === 'undefined' && typeof mockScroller.append === 'function') {
         const originalAppend = mockScroller.append;
         mockScroller.append = function (...args: unknown[]) {
-          const result = originalAppend.apply(this, args);
+          const result = Reflect.apply(originalAppend, this, args);
           markDirty();
           return result;
         };
@@ -382,11 +379,11 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
 
     const isReading = this.isReadingMode?.(view, container) === true;
     const selector = isReading ? '.markdown-preview-view' : '.cm-scroller';
-    const scroller = container.querySelector?.(selector) as HTMLElement | null;
+    const scroller = container.querySelector(selector);
     if (!scroller || typeof scroller.addEventListener !== 'function') return [];
 
     if (isReading) {
-      const parent = container.parentElement as HTMLElement | null;
+      const parent = container.parentElement;
       const parentIsVerifiedScrollSource = Boolean(
         parent
         && typeof parent.addEventListener === 'function'
@@ -516,7 +513,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     try {
       targetView.setEphemeralState?.(subpath ? { subpath, line, focus: false } : { line, focus: false });
       this.clearFlashHighlights?.(targetView.contentEl);
-    } catch (_) {
+    } catch {
       // Best-effort native state wake-up; calibration below remains authoritative.
     }
 

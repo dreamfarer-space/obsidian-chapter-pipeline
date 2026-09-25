@@ -22,6 +22,7 @@ Module._load = function loadWithObsidianStub(request, parent, isMain) {
       SuggestModal,
       Menu,
       Notice,
+      getLanguage: () => 'en',
     };
   }
   return originalLoad.call(this, request, parent, isMain);

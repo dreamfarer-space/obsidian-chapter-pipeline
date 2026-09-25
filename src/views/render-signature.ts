@@ -1,3 +1,5 @@
+import type { PluginSettings } from '../types';
+
 interface HeadingLike {
   heading?: string;
   level?: number;
@@ -10,7 +12,7 @@ interface FileLike {
 }
 
 export interface RenderSignaturePluginLike {
-  settings?: Record<string, unknown>;
+  settings?: Partial<PluginSettings>;
   documentRevisions?: Map<string, number>;
   app?: {
     metadataCache?: {
