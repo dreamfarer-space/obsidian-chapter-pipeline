@@ -116,7 +116,9 @@ import { defineConfig, globalIgnores } from 'eslint/config';
 
 const recommendedRules = Object.assign(
   {},
-  ...obsidianmd.configs.recommended.map((entry) => entry.rules ?? {})
+  ...obsidianmd.configs.recommended
+    .filter((entry) => !entry.files || entry.files.some((f) => f.includes('ts')))
+    .map((entry) => entry.rules ?? {})
 );
 
 function withSeverity(value, severity) {
@@ -145,11 +147,6 @@ for (const name of [
   scannerRules[name] = withSeverity(recommendedRules[name] ?? 'error', 'error');
 }
 
-for (const name of Object.keys(scannerRules)) {
-  if (name.startsWith('@typescript-eslint/no-unsafe-')) {
-    scannerRules[name] = 'off';
-  }
-}
 
 for (const name of [
   'no-undef',
@@ -204,6 +201,7 @@ export default defineConfig(
   ]),
   ...obsidianmd.configs.recommended,
   {
+    files: ['**/*.{ts,cts,mts,tsx}'],
     linterOptions: {
       reportUnusedDisableDirectives: 'warn'
     },
@@ -212,9 +210,7 @@ export default defineConfig(
         ...globals.browser
       },
       parserOptions: {
-        projectService: {
-          allowDefaultProject: ['src/*.js']
-        },
+        projectService: true,
         tsconfigRootDir: process.cwd()
       }
     },

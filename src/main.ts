@@ -20,21 +20,8 @@ import { StepperView } from './ui/stepper';
 import { TooltipManager } from './ui/tooltip';
 import { ChapterSuggestModal as TypedChapterSuggestModal } from './ui/modal';
 import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './ui/settings-tab';
-import type { WorkspaceLeaf } from 'obsidian';
-import type { ChapterNode } from './types';
-
-interface LegacyRenderResult {
-  hostContainer: HTMLElement;
-  chapters: ChapterNode[];
-  stepperElement: HTMLElement;
-  dashElements: HTMLElement[];
-  tooltipElement: HTMLElement | null;
-  railIndicator: HTMLElement | null;
-  trackingContainer: HTMLElement | null;
-  releaseLegacyScrollTracking: () => void;
-  isCurrentMount: () => boolean;
-  mode: 'reading' | 'live-preview';
-}
+import type { WorkspaceLeaf, MarkdownView, TFile } from 'obsidian';
+import type { ChapterNode, LegacyRenderResult } from './types';
 
 /**
  * Typed production entry point owning view session lifecycles via standard
@@ -51,16 +38,18 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
   }
 
   /** Attach one generation-guarded typed session after compatibility rendering finishes. */
-  override async attachStepperToView(view: object): Promise<void> {
+  override async attachStepperToView(
+    view: MarkdownView | (object & { file?: TFile; contentEl?: HTMLElement })
+  ): Promise<LegacyRenderResult | undefined> {
     const coordinator = this.getSessionCoordinator();
     const sessionGeneration = coordinator.begin(view);
 
-    const rendered = (await super.attachStepperToView(view)) as LegacyRenderResult | undefined | void;
-    if (!coordinator.isCurrent(view, sessionGeneration) || !rendered) return;
+    const rendered = await super.attachStepperToView(view);
+    if (!coordinator.isCurrent(view, sessionGeneration) || !rendered) return rendered;
 
     const typedView = view as { contentEl?: HTMLElement; file?: unknown };
     const container = rendered.hostContainer;
-    if (!typedView.file || typeof typedView.file !== 'object' || typedView.contentEl !== container) return;
+    if (!typedView.file || typeof typedView.file !== 'object' || typedView.contentEl !== container) return rendered;
 
     const {
       chapters,
@@ -75,7 +64,7 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
     } = rendered;
     const filePath = (typedView.file as { path?: string }).path;
     if (filePath && chapters.length) rememberFileChapterSnapshot(this, filePath, chapters);
-    if (!chapters.length || !scroller) return;
+    if (!chapters.length || !scroller) return rendered;
 
     releaseLegacyScrollTracking();
 
@@ -102,10 +91,12 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
           this.disconnectReadingHeadingObserver(view);
         }
       },
-      findReadingHeading: mode === 'reading' && this.getReadingHeading
-        ? (chapter) => this.getReadingHeading?.(view, chapter) ?? null
+      findReadingHeading: mode === 'reading' && typeof this.getReadingHeading === 'function'
+        ? (chapter: ChapterNode): Element | null => this.getReadingHeading(view, chapter) ?? null
         : undefined,
-      onSelectChapter: (chapter) => this.jumpToHeading?.(view, chapter),
+      onSelectChapter: (chapter: ChapterNode): void => {
+        this.jumpToHeading(view, chapter);
+      },
       onActiveChapter: (index, previousIndex) => {
         if (previousIndex >= 0 && previousIndex !== index) {
           const volume = typeof this.settings?.soundVolume === 'number' ? this.settings.soundVolume : 50;
@@ -120,13 +111,14 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
     if (typedView.contentEl !== container || !isMounted) {
       coordinator.detach(view);
       session.dispose();
-      return;
+      return rendered;
     }
     coordinator.adopt(view, sessionGeneration, session);
+    return rendered;
   }
 
   /** Read all chapters through the typed base while keeping identity snapshots in typed ownership. */
-  override async getAllChaptersForView(view: object): Promise<ChapterNode[]> {
+  override async getAllChaptersForView(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<ChapterNode[]> {
     const chapters = await super.getAllChaptersForView(view);
     const filePath = (view as { file?: { path?: string } })?.file?.path;
     if (filePath && chapters.length) rememberFileChapterSnapshot(this, filePath, chapters);
@@ -146,9 +138,9 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
     });
     coordinator.disposeUnmounted(mountedViews);
 
-    leaves.forEach((leaf: any) => {
-      const view = leaf?.view as { file?: { path?: unknown } } | undefined;
-      if (!view || typeof view !== 'object' || !view.file || typeof view.file !== 'object' || typeof view.file.path !== 'string') {
+    leaves.forEach((leaf: WorkspaceLeaf) => {
+      const view = leaf?.view as (MarkdownView | (object & { file?: TFile; contentEl?: HTMLElement })) | undefined;
+      if (!view || typeof view !== 'object' || !view.file || typeof view.file !== 'object' || typeof (view.file as { path?: unknown }).path !== 'string') {
         return;
       }
       const renderSignature = buildViewRenderSignature(this, view);
@@ -169,7 +161,7 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
 const PublicPlugin = TypedProductionPlugin as typeof TypedProductionPlugin & Record<string, unknown>;
 PublicPlugin.ChapterParser = ChapterParser;
 PublicPlugin.SoundEngine = SoundEngine;
-PublicPlugin.updateHierarchyFolding = updateHierarchyFolding;
+PublicPlugin.updateHierarchyFolding = updateHierarchyFolding as unknown as typeof ChapterPipelineCoordinator.updateHierarchyFolding;
 PublicPlugin.ReadingStorage = ReadingStorage;
 PublicPlugin.ReadingViewTracker = ReadingViewTracker;
 PublicPlugin.LivePreviewTracker = LivePreviewTracker;
