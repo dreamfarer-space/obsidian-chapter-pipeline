@@ -70,7 +70,7 @@ interface StorageHost {
 /** Persistence boundary for reading state; Markdown files are never touched. */
 export class ReadingStorage {
   private readonly host: StorageHost;
-  private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  private saveTimer: number | null = null;
 
   constructor(host: StorageHost) {
     this.host = host;
@@ -162,20 +162,20 @@ export class ReadingStorage {
 
   async save(): Promise<void> {
     if (this.saveTimer) {
-      clearTimeout(this.saveTimer);
+      window.clearTimeout(this.saveTimer);
       this.saveTimer = null;
     }
     await this.host.saveData({ ...this.host.settings, readingState: this.state });
   }
 
   dispose(): void {
-    if (this.saveTimer) clearTimeout(this.saveTimer);
+    if (this.saveTimer) window.clearTimeout(this.saveTimer);
     this.saveTimer = null;
   }
 
   private scheduleSave(): void {
-    if (this.saveTimer) clearTimeout(this.saveTimer);
-    this.saveTimer = setTimeout(() => {
+    if (this.saveTimer) window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => {
       this.saveTimer = null;
       void this.save();
     }, 350);

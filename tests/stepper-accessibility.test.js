@@ -4,6 +4,16 @@ const path = require('node:path');
 const test = require('node:test');
 const { buildSync } = require('esbuild');
 
+const originalLoad = Module._load;
+Module._load = function loadWithObsidianStub(request, parent, isMain) {
+  if (request === 'obsidian') {
+    return {
+      getLanguage: () => 'en',
+    };
+  }
+  return originalLoad.call(this, request, parent, isMain);
+};
+
 function loadStepperModule() {
   const filename = path.join(__dirname, '../src/ui/stepper.ts');
   const result = buildSync({
@@ -13,6 +23,7 @@ function loadStepperModule() {
     format: 'cjs',
     target: 'node22',
     write: false,
+    external: ['obsidian'],
   });
 
   const compiled = new Module(filename, module);
@@ -51,6 +62,10 @@ class FakeElement {
     this.style = {};
     this.offsetTop = 0;
     this.offsetHeight = 0;
+  }
+
+  replaceChildren(...children) {
+    this.children = [...children];
   }
 
   setAttribute(name, value) {
@@ -94,6 +109,8 @@ class FakeElement {
     this.removed = true;
   }
 }
+
+global.createEl = () => new FakeElement();
 
 function chapter(title, level, line) {
   return { title, rawHeading: title, level, line, headingIndex: line, id: `${level}:${line}`, summaryMarkdown: '' };

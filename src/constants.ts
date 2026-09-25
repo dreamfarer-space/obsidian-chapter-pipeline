@@ -1,3 +1,4 @@
+import { getLanguage } from 'obsidian';
 import type { PluginSettings } from './types';
 
 export const DEFAULT_SETTINGS: PluginSettings = {
@@ -80,16 +81,23 @@ export const I18N: Record<Locale, I18nDictionary> = {
 };
 
 export function getLocale(): Locale {
-  const globalWindow = typeof window !== 'undefined' ? window : undefined;
-  const language = globalWindow?.localStorage?.getItem('language')
-    || (typeof navigator !== 'undefined' ? navigator.language : 'en');
+  let language = '';
+  try {
+    language = typeof getLanguage === 'function' ? getLanguage() : '';
+  } catch {
+    // getLanguage may throw outside of Obsidian runtime
+  }
+  if (!language && typeof navigator !== 'undefined') {
+    language = navigator.language;
+  }
   return String(language || 'en').toLowerCase().startsWith('zh') ? 'zh' : 'en';
 }
 
-export function translate(key: string, variables: Record<string, unknown> = {}): string {
+export function translate(key: string, variables: Record<string, string | number | boolean | null | undefined> = {}): string {
   const strings = I18N[getLocale()] || I18N.en;
   const value = strings[key] ?? I18N.en[key] ?? key;
-  return value.replace(/\{(\w+)\}/g, (match, name: string) => (
-    variables[name] === undefined || variables[name] === null ? match : String(variables[name])
-  ));
+  return value.replace(/\{(\w+)\}/g, (match, name: string) => {
+    const val = variables[name];
+    return val === undefined || val === null ? match : String(val);
+  });
 }

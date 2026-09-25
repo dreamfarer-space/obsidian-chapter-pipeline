@@ -26,7 +26,12 @@ export function hashHeadingSequence(headings: HeadingSequenceItem[] = []): strin
   let hash = FNV_OFFSET_BASIS;
 
   const mix = (value: unknown): void => {
-    const text = String(value ?? '');
+    const text =
+      typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? String(value)
+        : value === null || value === undefined
+          ? ''
+          : JSON.stringify(value);
     for (let i = 0; i < text.length; i += 1) {
       hash ^= text.charCodeAt(i);
       hash = Math.imul(hash, FNV_PRIME) >>> 0;

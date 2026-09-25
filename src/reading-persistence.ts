@@ -1,5 +1,5 @@
 import { MarkdownView } from 'obsidian';
-import { DEFAULT_SETTINGS } from './constants';
+import { DEFAULT_SETTINGS, getLocale } from './constants';
 import { normalizeReadingState } from './core/storage';
 import {
   chapterIdentityEquals,
@@ -38,7 +38,7 @@ export function rememberFileChapterSnapshot(
   plugin.fileChapterSnapshots.delete(path);
   plugin.fileChapterSnapshots.set(path, chapters);
   while (plugin.fileChapterSnapshots.size > MAX_FILE_CHAPTER_SNAPSHOTS) {
-    const oldest = plugin.fileChapterSnapshots.keys().next().value as string | undefined;
+    const oldest = plugin.fileChapterSnapshots.keys().next().value;
     if (oldest === undefined) break;
     plugin.fileChapterSnapshots.delete(oldest);
   }
@@ -99,12 +99,7 @@ function findChapterMarkerEntry(
 
 /** Produce the localized notices used by the identity-aware resume path. */
 function readingNoticeText(key: 'resumeUnavailable' | 'resumeNotFound' | 'resumeAvailable', title = ''): string {
-  const language = (
-    (typeof window !== 'undefined' && window.localStorage?.getItem('language')) ||
-    (typeof navigator !== 'undefined' ? navigator.language : 'en') ||
-    'en'
-  ).toLowerCase();
-  const zh = language.startsWith('zh');
+  const zh = getLocale() === 'zh';
   if (key === 'resumeUnavailable') return zh ? '这篇笔记没有保存的阅读位置。' : 'No saved reading position in this note.';
   if (key === 'resumeNotFound') return zh ? '保存的章节已不存在，无法恢复。' : 'The saved chapter is no longer available.';
   return zh ? `可恢复上次阅读：${title}` : `Resume available: ${title}`;
@@ -143,12 +138,13 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
 
   override ensureReadingState(): any {
     const state = this.settings?.readingState;
+    const rawFiles = (state as unknown as { files?: unknown } | undefined)?.files;
     const invalid = !state || typeof state !== 'object' || Array.isArray(state) ||
-      !(state as Record<string, unknown>).files ||
-      typeof (state as Record<string, unknown>).files !== 'object' ||
-      Array.isArray((state as Record<string, unknown>).files);
+      !rawFiles ||
+      typeof rawFiles !== 'object' ||
+      Array.isArray(rawFiles);
     if (invalid || (state as { version?: number } | undefined)?.version !== 2) {
-      if (!this.settings) this.settings = {};
+      if (!this.settings) this.settings = Object.assign({}, DEFAULT_SETTINGS);
       this.settings.readingState = normalizeReadingState(state);
     }
     return this.settings?.readingState;
@@ -164,7 +160,7 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     const typedView = view as { file?: FileLike };
     if (!this.isReadingBookmarksEnabled?.() || !this.isActiveMarkdownView?.(view) || !typedView.file || !chapter?.id) return false;
 
-    const fileState = this.getReadingFileState?.(typedView.file, true) as ReadingFileState | null;
+    const fileState = this.getReadingFileState?.(typedView.file, true);
     if (!fileState) return false;
     const chapters = getIdentityChapters(this, typedView.file, chapter, view);
     const identity = createChapterIdentity(chapter, chapters);
@@ -197,14 +193,14 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     const file = (targetView as { file?: FileLike } | null)?.file;
     if (!targetView || !file) return false;
 
-    const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
+    const fileState = this.getReadingFileState?.(file, false);
     const savedResume = fileState?.resume;
     if (!savedResume?.chapterId) {
       this.showNotice?.(readingNoticeText('resumeUnavailable'));
       return false;
     }
 
-    const chapters = await this.getAllChaptersForView?.(targetView) as ChapterNode[];
+    const chapters = (await this.getAllChaptersForView?.(targetView)) ?? [];
     const identity = normalizeChapterIdentity(savedResume.identity);
     const targetChapter = identity
       ? resolveChapterIdentity(identity, chapters)
@@ -245,9 +241,9 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     const file = (view as { file?: FileLike })?.file;
     if (!this.isReadingBookmarksEnabled?.() || !file || !chapter?.id || !['revisit', 'important'].includes(markerName)) return false;
 
-    const fileState = this.getReadingFileState?.(file, true) as ReadingFileState | null;
+    const fileState = this.getReadingFileState?.(file, true);
     if (!fileState) return false;
-    const chapters = await this.getAllChaptersForView?.(view) as ChapterNode[];
+    const chapters = (await this.getAllChaptersForView?.(view)) ?? [];
     const identityChapter = chapters.find((candidate) => candidate.id === chapter.id) ?? chapter;
     const identity = createChapterIdentity(identityChapter, chapters.length ? chapters : [chapter]);
     const existing = findChapterMarkerEntry(this, file, chapter, chapters.length ? chapters : [chapter]);
@@ -274,7 +270,7 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     const chapters = getIdentityChapters(this, file, chapter, view);
     const entry = findChapterMarkerEntry(this, file, chapter, chapters);
     if (!entry) return false;
-    const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
+    const fileState = this.getReadingFileState?.(file, false);
     if (!fileState) return false;
     delete fileState.markers[entry.key];
     this.pruneReadingFileState?.(file);
@@ -315,10 +311,10 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     file: FileLike
   ): void {
     if (!this.isReadingBookmarksEnabled?.() || !this.isActiveMarkdownView?.(view) || !file?.path || this.resumePromptedPaths?.has(file.path)) return;
-    const chapters = this.extractAllChapters?.(content, file) as ChapterNode[];
+    const chapters = this.extractAllChapters?.(content, file) ?? [];
     rememberFileChapterSnapshot(this, file.path, chapters);
 
-    const fileState = this.getReadingFileState?.(file, false) as ReadingFileState | null;
+    const fileState = this.getReadingFileState?.(file, false);
     const savedResume = fileState?.resume;
     if (!savedResume?.chapterId) return;
 

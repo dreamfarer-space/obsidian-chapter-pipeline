@@ -42,7 +42,7 @@ export function truncateExcerpt(text: string, maxLength = 200): string {
   let truncated = text.substring(0, cutIndex).trim();
   const { unclosedIndex } = findMathRanges(truncated);
   if (unclosedIndex !== -1) truncated = truncated.substring(0, unclosedIndex).trim();
-  truncated = truncated.replace(/[\s\.,;:!?，。！？]+$/, '');
+  truncated = truncated.replace(/[\s.,;:!?，。！？]+$/, '');
   return truncated ? `${truncated}...` : '...';
 }
 
@@ -75,13 +75,13 @@ function stripHtmlComments(input: string): string {
   return result;
 }
 
-export function normalizeHeadingText(text: unknown): string {
-  if (!text) return '';
-  return stripHtmlComments(String(text))
+export function normalizeHeadingText(text: string | null | undefined): string {
+  if (typeof text !== 'string' || !text) return '';
+  return stripHtmlComments(text)
     .replace(/\[\[.*?\|(.*?)\]\]/g, '$1')
     .replace(/\[\[(.*?)\]\]/g, '$1')
     .replace(/\[status::.*?\]/gi, '')
-    .replace(/[\$#\*=`~_\[\]\(\)（）:：·、\.,，。!！\?？\\/+\-—\s\u200B-\u200D\uFEFF]/g, '')
+    .replace(/[$#*=`~_[\]()（）:：·、.,，。!！?？\\/+\-—\s\u200B-\u200D\uFEFF]/g, '')
     .toLowerCase();
 }
 
@@ -219,7 +219,7 @@ export class ChapterParseCache {
     this.entries.delete(key);
     this.entries.set(key, value);
     while (this.entries.size > Math.max(1, this.maxEntries)) {
-      const oldest = this.entries.keys().next().value as string | undefined;
+      const oldest = this.entries.keys().next().value;
       if (oldest === undefined) break;
       this.entries.delete(oldest);
     }

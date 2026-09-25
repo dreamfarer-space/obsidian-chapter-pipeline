@@ -87,6 +87,7 @@ function loadProductionPlugin() {
         Menu,
         Notice,
         MarkdownRenderer: { render() {} },
+        getLanguage: () => 'en',
       };
     }
     return originalLoad.call(this, request, parent, isMain);

@@ -32,7 +32,7 @@ export class TooltipManager {
   private disposed = false;
 
   constructor(private readonly owner: HTMLElement, options: TooltipManagerOptions = {}) {
-    this.tooltip = options.existingTooltip ?? document.createElement('div');
+    this.tooltip = options.existingTooltip ?? createDiv();
     if (!options.existingTooltip) {
       this.tooltip.className = DOM_CLASSES.tooltip;
       this.tooltip.hidden = true;
@@ -43,11 +43,11 @@ export class TooltipManager {
   show(chapter: ChapterNode, anchor: HTMLElement): void {
     if (this.disposed) return;
     this.tooltip.textContent = '';
-    const title = document.createElement('strong');
+    const title = createEl('strong');
     title.textContent = chapter.title;
     this.tooltip.append(title);
     if (chapter.summaryMarkdown) {
-      const summary = document.createElement('div');
+      const summary = createDiv();
       summary.textContent = chapter.summaryMarkdown;
       this.tooltip.append(summary);
     }

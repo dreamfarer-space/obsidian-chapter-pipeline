@@ -46,18 +46,12 @@ export class SoundEngine {
 
   private getAudioContext(): AudioContextLike | null {
     if (!this.ctx) {
-      const globalWindow = typeof window !== 'undefined' ? window as unknown as {
+      const win = typeof window !== 'undefined' ? window as unknown as {
         AudioContext?: AudioContextConstructor;
         webkitAudioContext?: AudioContextConstructor;
       } : undefined;
-      const globalObject = typeof globalThis !== 'undefined' ? globalThis as typeof globalThis & {
-        AudioContext?: AudioContextConstructor;
-        webkitAudioContext?: AudioContextConstructor;
-      } : undefined;
-      const AudioContextClass = globalWindow?.AudioContext
-        || globalWindow?.webkitAudioContext
-        || globalObject?.AudioContext
-        || globalObject?.webkitAudioContext
+      const AudioContextClass = win?.AudioContext
+        || win?.webkitAudioContext
         || SoundEngine.lastAudioContextClass;
       if (AudioContextClass) {
         SoundEngine.lastAudioContextClass = AudioContextClass;

@@ -20,6 +20,7 @@ import { StepperView } from './ui/stepper';
 import { TooltipManager } from './ui/tooltip';
 import { ChapterSuggestModal as TypedChapterSuggestModal } from './ui/modal';
 import { ChapterPipelineSettingTab as TypedChapterPipelineSettingTab } from './ui/settings-tab';
+import type { WorkspaceLeaf } from 'obsidian';
 import type { ChapterNode } from './types';
 
 interface LegacyRenderResult {
@@ -78,7 +79,7 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
 
     releaseLegacyScrollTracking();
 
-    const hierarchyMode = (this.settings?.hierarchyMode ?? 'all') as 'all' | 'hover-expand' | 'active-branch';
+    const hierarchyMode = this.settings?.hierarchyMode ?? 'all';
     const renderSignature = buildViewRenderSignature(this, view);
 
     let session!: ViewSession;
@@ -115,7 +116,7 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
     });
 
     const markdownLeaves = this.app?.workspace?.getLeavesOfType?.('markdown');
-    const isMounted = markdownLeaves === undefined || markdownLeaves.some((leaf: any) => leaf?.view === view);
+    const isMounted = markdownLeaves === undefined || markdownLeaves.some((leaf: WorkspaceLeaf) => leaf?.view === view);
     if (typedView.contentEl !== container || !isMounted) {
       coordinator.detach(view);
       session.dispose();
@@ -126,7 +127,7 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
 
   /** Read all chapters through the typed base while keeping identity snapshots in typed ownership. */
   override async getAllChaptersForView(view: object): Promise<ChapterNode[]> {
-    const chapters = (await super.getAllChaptersForView(view)) as ChapterNode[];
+    const chapters = await super.getAllChaptersForView(view);
     const filePath = (view as { file?: { path?: string } })?.file?.path;
     if (filePath && chapters.length) rememberFileChapterSnapshot(this, filePath, chapters);
     return chapters;
@@ -137,7 +138,7 @@ class TypedProductionPlugin extends ReadingPersistencePlugin {
     const coordinator = this.getSessionCoordinator();
     const leaves = this.app?.workspace?.getLeavesOfType?.('markdown') ?? [];
     const mountedViews = new Set<object>();
-    leaves.forEach((leaf: any) => {
+    leaves.forEach((leaf: WorkspaceLeaf) => {
       const view = leaf?.view as { file?: { path?: unknown } } | undefined;
       if (view && typeof view === 'object' && view.file && typeof view.file === 'object' && typeof view.file.path === 'string') {
         mountedViews.add(view);
