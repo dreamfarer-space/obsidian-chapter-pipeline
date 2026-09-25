@@ -331,8 +331,9 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     try {
       const result = await super.onload();
       const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
-      if (playScrollTick && !this.soundEngine.__chapterScrollSoundGuarded) {
-        this.soundEngine.__chapterScrollSoundGuarded = true;
+      const soundEngineAny = this.soundEngine as (Record<string, any> & { __chapterScrollSoundGuarded?: boolean }) | undefined;
+      if (playScrollTick && soundEngineAny && !soundEngineAny.__chapterScrollSoundGuarded) {
+        soundEngineAny.__chapterScrollSoundGuarded = true;
         this.soundEngine.playScrollTick = (volume: number) => {
           if (this.settings?.enableScrollSound === true) playScrollTick(volume);
         };
@@ -370,7 +371,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     if (!container) return [];
     if (
       view
-      && this.app?.workspace?.getActiveViewOfType
+      && typeof this.app?.workspace?.getActiveViewOfType === 'function'
       && typeof this.isActiveMarkdownView === 'function'
       && !this.isActiveMarkdownView(view)
     ) {
@@ -400,7 +401,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
   override getCurrentEditorTopLine(view: any, container?: any, chapters: any = []): any {
     if (
       view
-      && this.app?.workspace?.getActiveViewOfType
+      && typeof this.app?.workspace?.getActiveViewOfType === 'function'
       && typeof this.isActiveMarkdownView === 'function'
       && !this.isActiveMarkdownView(view)
     ) {

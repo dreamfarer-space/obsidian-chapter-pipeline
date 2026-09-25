@@ -138,12 +138,13 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
 
   override ensureReadingState(): any {
     const state = this.settings?.readingState;
+    const rawFiles = (state as unknown as { files?: unknown } | undefined)?.files;
     const invalid = !state || typeof state !== 'object' || Array.isArray(state) ||
-      !(state as Record<string, unknown>).files ||
-      typeof (state as Record<string, unknown>).files !== 'object' ||
-      Array.isArray((state as Record<string, unknown>).files);
+      !rawFiles ||
+      typeof rawFiles !== 'object' ||
+      Array.isArray(rawFiles);
     if (invalid || (state as { version?: number } | undefined)?.version !== 2) {
-      if (!this.settings) this.settings = {};
+      if (!this.settings) this.settings = Object.assign({}, DEFAULT_SETTINGS);
       this.settings.readingState = normalizeReadingState(state);
     }
     return this.settings?.readingState;

@@ -2,9 +2,9 @@ import { Plugin, MarkdownView, MarkdownRenderer, PluginSettingTab, Setting, Sugg
 import { getLocale } from './constants';
 import { ChapterParser, ChapterParseCache, normalizeHeadingText } from './core/parser';
 import { SoundEngine } from './core/sound';
-import type { PluginSettings } from './types';
+import type { PluginSettings, ReadingState, ReadingFileState, ChapterMarker } from './types';
 
-const DEFAULT_SETTINGS = {
+const DEFAULT_SETTINGS: PluginSettings = {
   minHeadingLevel: 1,
   maxHeadingLevel: 2,
   ignoreFirstH1: false,
@@ -14,6 +14,7 @@ const DEFAULT_SETTINGS = {
   customActiveColor: '#3b82f6',
   narrowThreshold: 600,
   enableSound: true,
+  enableScrollSound: false,
   soundVolume: 50,
   dockPosition: 'left',
   hierarchyMode: 'hover-expand',
@@ -22,7 +23,7 @@ const DEFAULT_SETTINGS = {
   showChapterOrder: false,
   readingBookmarksEnabled: false,
   readingState: {
-    version: 1,
+    version: 2,
     files: {}
   }
 };
@@ -699,22 +700,23 @@ function formatTitleForRender(title: any) {
     .replace(/^(\s*[-*+])\s+/g, '\\$1 ');
 }
 
-function createEmptyReadingState(): Record<string, any> {
-  return { version: 1, files: {} };
+function createEmptyReadingState(): ReadingState {
+  return { version: 2, files: {} };
 }
 
-function normalizeReadingState(readingState: any) {
-  const normalized = createEmptyReadingState();
+function normalizeReadingState(readingState: any): ReadingState {
+  const normalized: ReadingState = createEmptyReadingState();
   const files = readingState && typeof readingState === 'object' && !Array.isArray(readingState)
-    ? readingState.files
+    ? (readingState as { files?: Record<string, any> }).files
     : null;
   if (!files || typeof files !== 'object' || Array.isArray(files)) return normalized;
 
   for (const [path, rawFileState] of Object.entries(files)) {
     if (!path || !rawFileState || typeof rawFileState !== 'object' || Array.isArray(rawFileState)) continue;
 
-    const fileState: Record<string, any> = { markers: {} };
-    const rawResume = rawFileState.resume;
+    const rawFile = rawFileState as Record<string, any>;
+    const fileState: ReadingFileState = { markers: {} };
+    const rawResume = rawFile.resume;
     if (rawResume && typeof rawResume === 'object' && typeof rawResume.chapterId === 'string' && rawResume.chapterId) {
       fileState.resume = {
         chapterId: rawResume.chapterId,
@@ -723,13 +725,13 @@ function normalizeReadingState(readingState: any) {
       };
     }
 
-    const rawMarkers = rawFileState.markers;
+    const rawMarkers = rawFile.markers;
     if (rawMarkers && typeof rawMarkers === 'object' && !Array.isArray(rawMarkers)) {
       for (const [chapterId, rawMarker] of Object.entries(rawMarkers)) {
         if (!chapterId || !rawMarker || typeof rawMarker !== 'object' || Array.isArray(rawMarker)) continue;
-        const marker = {
-          revisit: rawMarker.revisit === true,
-          important: rawMarker.important === true
+        const marker: ChapterMarker = {
+          revisit: (rawMarker as Record<string, any>).revisit === true,
+          important: (rawMarker as Record<string, any>).important === true
         };
         if (marker.revisit || marker.important) {
           fileState.markers[chapterId] = marker;
@@ -1233,6 +1235,7 @@ class ChapterPipelinePlugin extends Plugin {
     if (!this.isReadingBookmarksEnabled() || !this.isActiveMarkdownView(view) || !view?.file || !chapter?.id) return false;
 
     const fileState = this.getReadingFileState(view.file, true);
+    if (!fileState) return false;
     if (fileState.resume?.chapterId === chapter.id) return false;
 
     fileState.resume = {
@@ -1292,14 +1295,15 @@ class ChapterPipelinePlugin extends Plugin {
     if (!this.isReadingBookmarksEnabled() || !view?.file || !chapter?.id || !['revisit', 'important'].includes(markerName)) return false;
 
     const fileState = this.getReadingFileState(view.file, true);
+    if (!fileState) return false;
     const markers = fileState.markers || (fileState.markers = {});
-    const current = markers[chapter.id] || { revisit: false, important: false };
+    const current: Record<string, any> = (markers as Record<string, any>)[chapter.id] || { revisit: false, important: false };
     current[markerName] = !current[markerName];
 
     if (current.revisit || current.important) {
-      markers[chapter.id] = current;
+      (markers as Record<string, any>)[chapter.id] = current;
     } else {
-      delete markers[chapter.id];
+      delete (markers as Record<string, any>)[chapter.id];
       this.pruneReadingFileState(view.file);
     }
 
@@ -1339,7 +1343,7 @@ class ChapterPipelinePlugin extends Plugin {
     if (event?.preventDefault) event.preventDefault();
     if (event?.stopPropagation) event.stopPropagation();
 
-    const markers = this.getChapterMarkers(view?.file, chapter) || {};
+    const markers = (this.getChapterMarkers(view?.file, chapter) || { revisit: false, important: false }) as ChapterMarker;
     const menu = new Menu();
     menu.addItem((item: any) => item
       .setTitle(markers.revisit ? t('removeRevisitMark') : t('markForRevisit'))
@@ -1366,11 +1370,12 @@ class ChapterPipelinePlugin extends Plugin {
     return true;
   }
 
-  mergeReadingFileStates(destinationState: any, sourceState: any) {
-    const merged: Record<string, any> = { markers: {} };
+  mergeReadingFileStates(destinationState: any, sourceState: any): ReadingFileState {
+    const merged: ReadingFileState = { markers: {} };
     const states = [destinationState, sourceState].filter(Boolean);
     for (const state of states) {
-      for (const [chapterId, marker] of Object.entries(state.markers || {})) {
+      for (const [chapterId, rawMarker] of Object.entries((state.markers || {}) as Record<string, any>)) {
+        const marker = rawMarker as Record<string, any>;
         const current = merged.markers[chapterId] || { revisit: false, important: false };
         current.revisit = current.revisit || marker.revisit === true;
         current.important = current.important || marker.important === true;
@@ -2471,7 +2476,7 @@ class ChapterPipelinePlugin extends Plugin {
     if (!scroller || !chapters.length) return null;
     const scrollerRect = scroller.getBoundingClientRect();
     const activeBaseline = scrollerRect.top + 70;
-    const renderedLines = Array.from(container.querySelectorAll('.cm-line, .cm-heading'));
+    const renderedLines: any[] = Array.from(container.querySelectorAll('.cm-line, .cm-heading'));
     let closestLine = null;
     let closestTop = -Infinity;
 
