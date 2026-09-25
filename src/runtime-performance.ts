@@ -346,6 +346,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     }
   }
 
+  /** Extract chapters and invalidate cache when heading fingerprints change. */
   override extractChapters(
     content: string,
     file: TFile | { path?: string } | null | undefined,
@@ -373,6 +374,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     return super.extractChapters(content, file, parserSettings);
   }
 
+  /** Resolve scrollable elements for the active markdown view container. */
   override getViewScrollers(container: HTMLElement | null, view: object | null = null): HTMLElement[] {
     if (!container) return [];
     if (
@@ -404,6 +406,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     return [scroller];
   }
 
+  /** Calculate the active editor top line for live preview or source modes. */
   override getCurrentEditorTopLine(view: object, container?: HTMLElement, chapters: ChapterNode[] = []): number {
     if (
       view
@@ -416,6 +419,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     return super.getCurrentEditorTopLine(view, container, chapters);
   }
 
+  /** Retrieve the rendered reading view heading corresponding to a chapter. */
   override getReadingHeading(view: object, chapter: ChapterLike): Element | null {
     const targetView = view as { contentEl?: HTMLElement };
     const scroller = targetView?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
@@ -468,6 +472,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
       : null;
   }
 
+  /** Attach observer-guarded stepper to a view and tag layer styles. */
   override async attachStepperToView(
     view: MarkdownView | (object & { file?: TFile; contentEl?: HTMLElement })
   ): Promise<LegacyRenderResult | undefined> {
@@ -495,6 +500,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     return result;
   }
 
+  /** Navigate reading or source view to a specified chapter heading. */
   override jumpToHeading(view: object, chapter: ChapterLike | number): void {
     const targetView = (view && typeof view === 'object' && 'file' in view && (view as { file?: unknown }).file)
       ? (view as {

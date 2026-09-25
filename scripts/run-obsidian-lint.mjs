@@ -201,7 +201,7 @@ export default defineConfig(
   ]),
   ...obsidianmd.configs.recommended,
   {
-    files: ['**/*.{ts,cts,mts,tsx}'],
+    files: ['**/*.{ts,tsx}'],
     linterOptions: {
       reportUnusedDisableDirectives: 'warn'
     },

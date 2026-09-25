@@ -460,6 +460,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     }
   }
 
+  /** Handle suggestion selection by triggering click sound and navigating to chapter. */
   onChooseSuggestion(item: ChapterNode, evt: MouseEvent | KeyboardEvent): void {
     this.onChooseItem(item, evt);
   }
@@ -1386,6 +1387,7 @@ class ChapterPipelinePlugin extends Plugin {
     return true;
   }
 
+  /** Display context menu actions for a chapter bookmark. */
   showChapterContextMenu(event: MouseEvent, view: MarkdownView | (object & { file?: TFile }) | null | undefined, chapter: ChapterLike | null | undefined): void {
     if (!this.isReadingBookmarksEnabled() || !chapter) return;
     if (event?.preventDefault) event.preventDefault();
@@ -1408,6 +1410,7 @@ class ChapterPipelinePlugin extends Plugin {
     menu.showAtMouseEvent(event);
   }
 
+  /** Remove all bookmark markers for a specific chapter in the file. */
   async clearChapterMarkers(view: MarkdownView | (object & { file?: TFile }) | null | undefined, chapter: ChapterLike | null | undefined): Promise<boolean> {
     const file = (view as { file?: TFile })?.file;
     if (!file || !chapter?.id) return false;
@@ -1420,6 +1423,7 @@ class ChapterPipelinePlugin extends Plugin {
     return true;
   }
 
+  /** Merge reading file bookmarks between destination and source states. */
   mergeReadingFileStates(destinationState: ReadingFileState | undefined, sourceState: ReadingFileState | undefined): ReadingFileState {
     const merged: ReadingFileState = { markers: {} };
     const states = [destinationState, sourceState].filter(Boolean);
@@ -2557,6 +2561,7 @@ class ChapterPipelinePlugin extends Plugin {
     return 0;
   }
 
+  /** Find the closest heading line within the live preview baseline. */
   getLivePreviewHeadingLine(container: HTMLElement | null | undefined, chapters: ChapterNode[] = []): number | null {
     if (!container || !chapters.length) return null;
     const scroller = container.querySelector('.cm-scroller');

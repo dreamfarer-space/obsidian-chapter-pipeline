@@ -117,6 +117,7 @@ function readingNoticeText(key: 'resumeUnavailable' | 'resumeNotFound' | 'resume
 export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
   fileChapterSnapshots: Map<string, ChapterNode[]> = new Map<string, ChapterNode[]>();
 
+  /** Load persisted settings with type safety and fallback defaults. */
   override async loadSettings(): Promise<void> {
     const loaded = (await this.loadData?.()) as Record<string, unknown> | null | undefined;
     const loadedSettings = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
@@ -141,6 +142,7 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     await this.saveSettings?.();
   }
 
+  /** Ensure the reading state object exists and conforms to the v2 schema. */
   override ensureReadingState(): ReadingState {
     const state = this.settings?.readingState;
     const rawFiles = (state as unknown as { files?: unknown } | undefined)?.files;
@@ -339,12 +341,14 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     }
   }
 
+  /** Migrate reading state and file chapter snapshots from old path to new path. */
   override async migrateReadingState(oldPath: string, newPath: string): Promise<boolean> {
     const result = await super.migrateReadingState(oldPath, newPath);
     this.fileChapterSnapshots?.delete(oldPath);
     return Boolean(result);
   }
 
+  /** Clean up reading state and snapshot caches for deleted paths or folders. */
   override async pruneDeletedReadingState(deletedPath: string): Promise<number> {
     const result = await super.pruneDeletedReadingState(deletedPath);
     const prefix = deletedPath.endsWith('/') ? deletedPath : `${deletedPath}/`;
