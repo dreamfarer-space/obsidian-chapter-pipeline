@@ -7,7 +7,10 @@
     "build": "node esbuild.config.mjs production",
     "dev": "node esbuild.config.mjs",
     "lint:obsidian": "node scripts/run-obsidian-lint.mjs",
-    "test": "node --test main.test.js tests/tracking.test.js tests/virtualization.test.js tests/view-session.test.js tests/stepper-accessibility.test.js tests/runtime-helpers.test.js tests/session-reuse.test.js tests/scroll-scope.test.js tests/reading-identity.test.js"
+    "smoke:setup": "node scripts/setup-smoke-vault.mjs",
+    "smoke:run": "node scripts/run-smoke.mjs",
+    "test:smoke": "node scripts/run-smoke.mjs --headless",
+    "test": "node --test main.test.js tests/tracking.test.js tests/virtualization.test.js tests/view-session.test.js tests/stepper-accessibility.test.js tests/runtime-helpers.test.js tests/session-reuse.test.js tests/scroll-scope.test.js tests/reading-identity.test.js tests/lifecycle-smoke.test.js"
   },
   "keywords": [
     "obsidian",

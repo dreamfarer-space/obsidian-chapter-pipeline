@@ -1,0 +1,9 @@
+{
+  "id": "smoke-runner",
+  "name": "Smoke Runner",
+  "version": "1.0.0",
+  "minAppVersion": "0.15.9",
+  "description": "Automated lifecycle smoke-test runner for Chapter Pipeline",
+  "author": "Obsidian Chapter Pipeline",
+  "isDesktopOnly": true
+}

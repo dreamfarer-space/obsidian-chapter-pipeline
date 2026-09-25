@@ -4,3 +4,10 @@ data.json
 .DS_Store
 Thumbs.db
 .superpowers/
+
+# Smoke test vault runtime artifacts
+tests/fixtures/smoke-vault/.obsidian/plugins/chapter-pipeline/
+tests/fixtures/smoke-vault/.obsidian/workspace.json
+tests/fixtures/smoke-vault/smoke-report.json
+tests/fixtures/smoke-vault/smoke-report.md
+tests/fixtures/smoke-vault/.smoke-*
