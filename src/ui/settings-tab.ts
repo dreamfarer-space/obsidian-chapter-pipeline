@@ -14,6 +14,7 @@ interface SettingsPlugin {
 export class ChapterPipelineSettingTab extends PluginSettingTab {
   declare plugin: SettingsPlugin;
 
+  /** Initialize isolated settings tab with plugin reference. */
   constructor(app: unknown, plugin: SettingsPlugin) {
     super(app as never, plugin as never);
     this.plugin = plugin;
@@ -56,7 +57,7 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
         control: {
           type: 'slider',
           key: 'narrowThreshold',
-          defaultValue: 350,
+          defaultValue: 600,
           min: 350,
           max: 700,
           step: 10
@@ -82,6 +83,8 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
     this.plugin.updateAllMarkdownViews?.();
     if (typeof (this as { refreshDomState?: () => void }).refreshDomState === 'function') {
       (this as { refreshDomState?: () => void }).refreshDomState!();
+    } else if (typeof (this as { update?: () => void }).update === 'function') {
+      (this as { update?: () => void }).update!();
     }
   }
 
@@ -98,6 +101,7 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
     this.addSlider(strings.narrowThresholdName || 'Narrow threshold', strings.narrowThresholdDesc || '', 'narrowThreshold', 350, 700, 10);
   }
 
+  /** Add a boolean toggle setting control. */
   private addToggle(name: string, desc: string, key: keyof PluginSettings, fallback: boolean): void {
     new Setting(this.containerEl)
       .setName(name)
@@ -111,13 +115,14 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
         }));
   }
 
+  /** Add a numeric slider setting control. */
   private addSlider(name: string, desc: string, key: keyof PluginSettings, min: number, max: number, step: number): void {
     new Setting(this.containerEl)
       .setName(name)
       .setDesc(desc)
       .addSlider((slider) => slider
         .setLimits(min, max, step)
-        .setValue(Number(this.plugin.settings[key] ?? min))
+        .setValue(Number(this.plugin.settings[key] ?? (key === 'narrowThreshold' ? 600 : min)))
         .onChange(async (value) => {
           this.plugin.settings[key] = value;
           await this.plugin.saveSettings();

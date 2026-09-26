@@ -25,6 +25,7 @@ type ReadingHeadingSnapshot = {
   byTag: Map<string, ReadingHeadingEntry[]>;
 };
 
+/** Extract fallback heading nodes using markdown heading syntax when metadata cache is unready. */
 function fallbackHeadings(content: string): Array<{ heading: string; level: number; position: { start: { line: number } } }> {
   const headings: Array<{ heading: string; level: number; position: { start: { line: number } } }> = [];
   let inFence = false;
@@ -47,13 +48,14 @@ function fallbackHeadings(content: string): Array<{ heading: string; level: numb
   return headings;
 }
 
-
+/** Check whether a reading-view heading element is eligible for TOC tracking. */
 function isUsableReadingHeading(element: Element): boolean {
   if (element.classList?.contains('inline-title')) return false;
   if (typeof element.closest !== 'function') return true;
   return !element.closest('.internal-embed, .markdown-embed, .markdown-embed-content, .popover, .codex-floating-tooltip, .mod-header');
 }
 
+/** Build snapshot of reading-view heading elements with line and tag indexes. */
 function buildReadingHeadingSnapshot(scroller: Element): ReadingHeadingSnapshot {
   const rendered = Array.from(scroller.querySelectorAll('h1, h2, h3, h4, h5, h6'))
     .filter(isUsableReadingHeading);
@@ -90,6 +92,7 @@ function buildReadingHeadingSnapshot(scroller: Element): ReadingHeadingSnapshot 
   return { entries, byLine, byTagAndText, byText, byTag };
 }
 
+/** Resolve the rendered reading-view heading element matching a chapter node from snapshot cache. */
 function resolveReadingHeading(
   snapshot: ReadingHeadingSnapshot,
   scroller: Element,
@@ -153,6 +156,7 @@ type ReadingHeadingObserverState = {
   restoreMockHooks?: () => void;
 };
 
+/** Compute a compact structural signature from first and last scroller children. */
 function getScrollerChildSignature(scroller: Element): string {
   const children = (scroller as Element & { children?: ArrayLike<Element> }).children;
   if (!children || typeof children.length !== 'number') return '';
@@ -168,6 +172,7 @@ function getScrollerChildSignature(scroller: Element): string {
   return `${length}:${first}:${last}`;
 }
 
+/** Check whether a DOM node is a heading or markdown preview section element. */
 function isHeadingOrSectionNode(node: unknown): boolean {
   if (!node || typeof node !== 'object') return false;
   const element = node as Element;
@@ -184,6 +189,7 @@ function isHeadingOrSectionNode(node: unknown): boolean {
   return false;
 }
 
+/** Determine whether DOM mutations contain changes to heading or section structures. */
 function didReadingHeadingsMutate(records?: MutationRecord[]): boolean {
   if (!Array.isArray(records) || records.length === 0) return true;
   for (const record of records) {

@@ -102,11 +102,13 @@ export class LivePreviewTracker {
     this.frame = executedSynchronously ? null : frame;
   };
 
+  /** Check whether an element matches candidate heading selectors. */
   private isCandidateElement(value: unknown): boolean {
     if (!value || typeof (value as Element).matches !== 'function') return false;
     return (value as Element).matches(CANDIDATE_SELECTOR);
   }
 
+  /** Return whether an element matches or contains any chapter heading candidate. */
   private containsCandidate(value: unknown): boolean {
     if (!value) return false;
     const node = value as Element;
@@ -119,6 +121,7 @@ export class LivePreviewTracker {
     return typeof query === 'function' && Boolean(query.call(node, CANDIDATE_SELECTOR));
   }
 
+  /** Check whether an element is or is enclosed within a candidate heading element. */
   private isInsideCandidate(value: unknown): boolean {
     if (!value) return false;
     const node = value as Element;
@@ -126,6 +129,7 @@ export class LivePreviewTracker {
     return typeof node.closest === 'function' && Boolean(node.closest(CANDIDATE_SELECTOR));
   }
 
+  /** Determine impact level of a mutation record on live preview heading layout and cache. */
   private getMutationImpact(record: MutationRecord): 'none' | 'layout' | 'refresh' {
     if (record.type === 'attributes') {
       if (record.attributeName === 'data-line') {

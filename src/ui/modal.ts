@@ -19,6 +19,7 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   private readonly chapters: ChapterNode[];
   private readonly component = new Component();
 
+  /** Initialize suggestion modal with keyboard navigation, styles, and rendering lifecycle. */
   constructor(app: unknown, plugin: ModalPlugin, view: { file?: unknown }, chapters: ChapterNode[]) {
     super(app as never);
     this.component.load();
@@ -33,10 +34,13 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     modalElement?.style?.setProperty('--codex-active-foreground', plugin.resolveActiveForeground?.(plugin.settings?.activeColor) || '#ffffff');
   }
 
+  /** Return all chapters available for outline search in this note. */
   getItems(): ChapterNode[] { return this.chapters; }
 
+  /** Return raw search text combining chapter title and excerpt. */
   getItemText(item: ChapterNode): string { return `${item.title || ''} ${item.summaryMarkdown || ''}`; }
 
+  /** Filter chapter items matching query tokens across titles, excerpts, levels, and bookmarks. */
   getSuggestions(query: string): ChapterNode[] {
     if (!query?.trim()) return this.chapters;
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -55,6 +59,7 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     });
   }
 
+  /** Render suggestion item with level badge, formatted title, excerpt, and bookmark tags. */
   renderSuggestion(item: ChapterNode, element: HTMLElement): void {
     element.replaceChildren();
     const header = element.createDiv({ cls: 'codex-modal-header' });
@@ -78,11 +83,13 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     this.component.unload();
   }
 
+  /** Navigate view to selected chapter with tactile click feedback. */
   onChooseSuggestion(item: ChapterNode): void {
     if (this.plugin.settings?.enableSound !== false) this.plugin.soundEngine?.playClick(this.plugin.settings?.soundVolume ?? 50);
     this.plugin.jumpToHeading?.(this.view, item);
   }
 
+  /** Select suggestion and navigate to chapter. */
   onChooseItem(item: ChapterNode): void { this.onChooseSuggestion(item); }
 }
 

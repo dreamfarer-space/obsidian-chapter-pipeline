@@ -2560,15 +2560,20 @@ test('modal close and tooltip replacement unload components and release register
   assert.equal(tooltip1CleanupRan, true, 'old tooltip component cleanup should have executed');
   assert.equal(tooltipComp2._loaded, true, 'new tooltip component should be loaded');
 
+  // 3. cleanupViewTooltip unloads component and removes tooltip from DOM and tracking maps
   let tooltip2CleanupRan = false;
   tooltipComp2.register(() => {
     tooltip2CleanupRan = true;
   });
 
-  // onunload unloads all active tooltip components
+  plugin.cleanupViewTooltip(view);
+  assert.equal(tooltipComp2._loaded, false, 'view tooltip component should be unloaded on cleanupViewTooltip');
+  assert.equal(tooltip2CleanupRan, true, 'cleanup callback should execute on cleanupViewTooltip');
+  assert.equal(plugin.viewTooltips.has(view), false, 'viewTooltips map should not contain view');
+  assert.equal(plugin.viewTooltipComponents.has(view), false, 'viewTooltipComponents map should not contain view');
+
+  // onunload cleanly handles empty or already-cleaned maps
   plugin.onunload();
-  assert.equal(tooltipComp2._loaded, false, 'active tooltip component should be unloaded on plugin onunload');
-  assert.equal(tooltip2CleanupRan, true, 'active tooltip cleanup should execute on onunload');
 });
 
 test('declarative settings tabs support defaultValue, get/setControlValue, view updates, and conditional visibility', async () => {
@@ -2595,6 +2600,10 @@ test('declarative settings tabs support defaultValue, get/setControlValue, view 
     }
   }
 
+  // Verify narrowThreshold defaultValue matches DEFAULT_SETTINGS (600)
+  const narrowDef = defs.find((d) => d.control && d.control.key === 'narrowThreshold');
+  assert.equal(narrowDef.control.defaultValue, 600, 'narrowThreshold default should be 600');
+
   // Verify getControlValue
   assert.equal(plugin.settingTab.getControlValue('dockPosition'), 'left');
   assert.equal(plugin.settingTab.getControlValue('showExcerpt'), true);
@@ -2605,14 +2614,28 @@ test('declarative settings tabs support defaultValue, get/setControlValue, view 
   assert.equal(plugin.settings.dockPosition, 'right');
   assert.equal(viewsUpdated, 1);
 
-  // Verify customActiveColor visibility predicate
+  // Verify customActiveColor visibility predicate and static defaultValue
   const customColorDef = defs.find((d) => d.control && d.control.key === 'customActiveColor');
   assert.ok(customColorDef, 'customActiveColor definition should exist');
+  assert.equal(customColorDef.control.defaultValue, '#3b82f6');
   assert.equal(typeof customColorDef.visible, 'function');
   assert.equal(customColorDef.visible(), false, 'custom color should be hidden when activeColor is default');
 
   await plugin.settingTab.setControlValue('activeColor', 'custom');
   assert.equal(customColorDef.visible(), true, 'custom color should be visible when activeColor is custom');
+
+  // Verify customActiveColor sanitization
+  await plugin.settingTab.setControlValue('customActiveColor', 'invalid-color');
+  assert.equal(plugin.settings.customActiveColor, '#3b82f6', 'invalid color format should fall back to default');
+  await plugin.settingTab.setControlValue('customActiveColor', '#ef4444');
+  assert.equal(plugin.settings.customActiveColor, '#ef4444', 'valid hex color should be preserved');
+
+  // Verify soundVolume tactile sound feedback in setControlValue
+  let clickSoundVolume = 0;
+  plugin.soundEngine = { playClick: (v) => { clickSoundVolume = v; } };
+  plugin.settings.enableSound = true;
+  await plugin.settingTab.setControlValue('soundVolume', 80);
+  assert.equal(clickSoundVolume, 80, 'soundVolume change should trigger playClick preview');
 
   // Verify excerptLength visibility predicate
   const excerptLenDef = defs.find((d) => d.control && d.control.key === 'excerptLength');
@@ -2642,7 +2665,7 @@ test('declarative settings tabs support defaultValue, get/setControlValue, view 
   const TypedSettingTab = ChapterPipelinePlugin.TypedChapterPipelineSettingTab;
   assert.ok(TypedSettingTab);
   const mockPlugin = {
-    settings: { showExcerpt: true, ignoreFirstH1: false, readingBookmarksEnabled: false, narrowThreshold: 350 },
+    settings: { showExcerpt: true, ignoreFirstH1: false, readingBookmarksEnabled: false, narrowThreshold: 600 },
     saveSettings: async () => {},
     updateAllMarkdownViews: () => { viewsUpdated++; }
   };
@@ -2652,8 +2675,15 @@ test('declarative settings tabs support defaultValue, get/setControlValue, view 
     assert.equal(item.id, undefined);
     assert.notEqual(item.control.defaultValue, undefined);
   }
+  const typedNarrowDef = typedDefs.find((d) => d.control && d.control.key === 'narrowThreshold');
+  assert.equal(typedNarrowDef.control.defaultValue, 600);
+
+  // Verify update fallback when refreshDomState is not available
+  let updateCalled = false;
+  typedTab.update = () => { updateCalled = true; };
   viewsUpdated = 0;
   await typedTab.setControlValue('showExcerpt', false);
   assert.equal(mockPlugin.settings.showExcerpt, false);
   assert.equal(viewsUpdated, 1);
+  assert.equal(updateCalled, true, 'update() should be called as fallback when refreshDomState is absent');
 });

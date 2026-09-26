@@ -383,6 +383,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   chapters: ChapterNode[];
   component: Component = new SafeComponent();
 
+  /** Initialize suggestion modal with keyboard navigation, styles, and rendering lifecycle. */
   constructor(app: App, plugin: ChapterPipelinePlugin, view: MarkdownView | (object & { file?: TFile }), chapters: ChapterNode[]) {
     super(app);
     this.component.load();
@@ -412,14 +413,17 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     this.component.unload();
   }
 
+  /** Return all chapters available for outline search in this note. */
   getItems(): ChapterNode[] {
     return this.chapters;
   }
 
+  /** Return raw search text combining chapter title and excerpt. */
   getItemText(item: ChapterNode): string {
     return (item.title || '') + ' ' + (item.summaryMarkdown || '');
   }
 
+  /** Filter chapter items matching query tokens across titles, excerpts, levels, and bookmarks. */
   getSuggestions(query: string): ChapterNode[] {
     if (!query || !query.trim()) {
       return this.chapters;
@@ -460,6 +464,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     });
   }
 
+  /** Render suggestion item with level badge, formatted title, excerpt, and bookmark tags. */
   renderSuggestion(item: ChapterNode, el: HTMLElement): void {
     if (typeof el.empty === 'function') el.empty();
     if (typeof el.addClass === 'function') {
@@ -510,6 +515,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     this.onChooseItem(item, evt);
   }
 
+  /** Navigate view to selected chapter with tactile click feedback. */
   onChooseItem(item: ChapterNode, evt: MouseEvent | KeyboardEvent): void {
     if (!item) return;
     if (this.plugin?.settings?.enableSound !== false) {
@@ -524,6 +530,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
 class ChapterPipelineSettingTab extends PluginSettingTab {
   plugin: ChapterPipelinePlugin;
 
+  /** Initialize setting tab with plugin reference. */
   constructor(app: App, plugin: ChapterPipelinePlugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -676,7 +683,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
         control: {
           type: 'color',
           key: 'customActiveColor',
-          defaultValue: this.plugin.settings.customActiveColor || '#3b82f6'
+          defaultValue: '#3b82f6'
         }
       },
       {
@@ -740,13 +747,21 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
       settings[key] = parseInt(String(value), 10);
     } else if (key === 'excerptLength' || key === 'narrowThreshold' || key === 'soundVolume') {
       settings[key] = Number(value);
+    } else if (key === 'customActiveColor') {
+      const str = typeof value === 'string' ? value.trim() : '';
+      settings[key] = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(str) ? str : (settings[key] || '#3b82f6');
     } else {
       settings[key] = value;
     }
     await this.plugin.saveSettings();
+    if (key === 'soundVolume' && this.plugin.settings?.enableSound !== false && this.plugin.soundEngine) {
+      this.plugin.soundEngine.playClick(Number(value));
+    }
     this.plugin.updateAllMarkdownViews?.();
     if (typeof (this as { refreshDomState?: () => void }).refreshDomState === 'function') {
       (this as { refreshDomState?: () => void }).refreshDomState!();
+    } else if (typeof (this as { update?: () => void }).update === 'function') {
+      (this as { update?: () => void }).update!();
     }
   }
 
@@ -1020,6 +1035,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
   }
 }
 
+/** Escape leading ordered-list digits in chapter titles to prevent accidental markdown list formatting. */
 function formatTitleForRender(title: unknown): string {
   if (!title) return '';
   return String(title)
@@ -1028,10 +1044,12 @@ function formatTitleForRender(title: unknown): string {
     .replace(/^(\s*[-*+])\s+/g, '\\$1 ');
 }
 
+/** Create a blank reading state container initialized to version 2 schema. */
 function createEmptyReadingState(): ReadingState {
   return { version: 2, files: {} };
 }
 
+/** Validate and sanitize raw reading state data into a structured schema object. */
 function normalizeReadingState(readingState: unknown): ReadingState {
   const normalized: ReadingState = createEmptyReadingState();
   const files = readingState && typeof readingState === 'object' && !Array.isArray(readingState)
@@ -1959,6 +1977,20 @@ class ChapterPipelinePlugin extends Plugin {
     return modal;
   }
 
+  /** Clean up any floating tooltip element and markdown component associated with a view. */
+  cleanupViewTooltip(view: object): void {
+    const oldTooltip = this.viewTooltips?.get(view);
+    if (oldTooltip) {
+      oldTooltip.remove();
+      this.viewTooltips.delete(view);
+    }
+    const oldComponent = this.viewTooltipComponents?.get(view);
+    if (oldComponent) {
+      oldComponent.unload();
+      this.viewTooltipComponents.delete(view);
+    }
+  }
+
   async attachStepperToView(view: MarkdownView | (object & { file?: TFile; contentEl?: HTMLElement })): Promise<LegacyRenderResult | undefined> {
     if (!view || !(view as { file?: TFile }).file) return;
 
@@ -1973,16 +2005,7 @@ class ChapterPipelinePlugin extends Plugin {
     const existing = container.querySelector('.codex-stepper-container');
     if (existing) existing.remove();
 
-    const oldTooltip = this.viewTooltips.get(view);
-    if (oldTooltip) {
-      oldTooltip.remove();
-      this.viewTooltips.delete(view);
-    }
-    const oldComponent = this.viewTooltipComponents.get(view);
-    if (oldComponent) {
-      oldComponent.unload();
-      this.viewTooltipComponents.delete(view);
-    }
+    this.cleanupViewTooltip(view);
 
     if (this.observers.has(container)) {
       (this.observers.get(container) as ResizeObserver | MutationObserver).disconnect();
@@ -2532,6 +2555,7 @@ class ChapterPipelinePlugin extends Plugin {
     }) || scrollers[0];
   }
 
+  /** Clear temporary flash and jump highlight classes while preserving user markdown highlights. */
   clearFlashHighlights(container: HTMLElement | null | undefined): void {
     if (!container) return;
     const flashEls: HTMLElement[] = (typeof (container as { findAll?: (s: string) => HTMLElement[] }).findAll === 'function')
@@ -3149,7 +3173,8 @@ class ChapterPipelinePlugin extends Plugin {
     }
     const doc = typeof document !== 'undefined' ? document : null;
     const body = doc ? doc.body : null;
-    const removeElements = (selector: string) => {
+    /** Safely remove DOM elements matching selector using either findAll or querySelectorAll. */
+    const removeElements = (selector: string): void => {
       if (body && typeof (body as { findAll?: (s: string) => HTMLElement[] }).findAll === 'function') {
         (body as { findAll: (s: string) => HTMLElement[] }).findAll(selector).forEach((el: Element) => el.remove());
       } else {
