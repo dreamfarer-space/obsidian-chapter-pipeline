@@ -8,7 +8,7 @@ Floating heading dashes · KaTeX previews · pinned-top navigation · reading bo
 
 [![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
-[![Obsidian](https://img.shields.io/badge/Declared%20min-0.15.9-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
+[![Obsidian](https://img.shields.io/badge/Declared%20min-1.8.7-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 **English** · [简体中文](README.zh-CN.md)
@@ -180,7 +180,7 @@ Architecture and implementation notes live in [`docs/`](docs/):
 
 ## Compatibility verification
 
-The current `1.2.3` manifest declares `minAppVersion: 0.15.9` and `isDesktopOnly: true`. The latest recorded real-app smoke matrix was run on the packaged `1.2.2` build on 2026-09-23 and passed on official Obsidian Desktop `0.15.9` and `1.13.7`. Release `1.2.3` retains the same declared compatibility/platform metadata but contains review/UI implementation changes, so the recorded `1.2.2` smoke run is not represented as a separate `1.2.3` real-app test. See [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) for the exact evidence. Android/iOS support is not currently claimed.
+The current `1.2.3` manifest declares `minAppVersion: 1.8.7` and `isDesktopOnly: true`. The latest recorded real-app smoke matrix was run on the packaged `1.2.3` build on 2026-09-25 and passed on official Obsidian Desktop `1.8.7` and `1.13.7`. See [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) for the exact evidence. Android/iOS support is not currently claimed.
 
 ## Privacy
 
