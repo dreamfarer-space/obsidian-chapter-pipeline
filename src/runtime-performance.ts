@@ -1,5 +1,4 @@
-import { Setting, PluginSettingTab, MarkdownView, type TFile } from 'obsidian';
-import { getLocale } from './constants';
+import { MarkdownView, TFile } from 'obsidian';
 import { normalizeHeadingText } from './core/parser';
 import { ChapterPipelineCoordinator } from './plugin-coordinator';
 import {
@@ -7,7 +6,7 @@ import {
   nextCalibrationState,
   type CalibrationState
 } from './runtime-helpers';
-import type { ChapterNode, ChapterLike, LegacyRenderResult } from './types';
+import type { ChapterNode, ChapterLike, HeadingCacheEntry, LegacyRenderResult } from './types';
 
 type LegacyPluginConstructor = { prototype: Record<string, unknown> };
 
@@ -26,6 +25,7 @@ type ReadingHeadingSnapshot = {
   byTag: Map<string, ReadingHeadingEntry[]>;
 };
 
+/** Extract fallback heading nodes using markdown heading syntax when metadata cache is unready. */
 function fallbackHeadings(content: string): Array<{ heading: string; level: number; position: { start: { line: number } } }> {
   const headings: Array<{ heading: string; level: number; position: { start: { line: number } } }> = [];
   let inFence = false;
@@ -48,16 +48,14 @@ function fallbackHeadings(content: string): Array<{ heading: string; level: numb
   return headings;
 }
 
-function isChineseLocale(): boolean {
-  return getLocale() === 'zh';
-}
-
+/** Check whether a reading-view heading element is eligible for TOC tracking. */
 function isUsableReadingHeading(element: Element): boolean {
   if (element.classList?.contains('inline-title')) return false;
   if (typeof element.closest !== 'function') return true;
   return !element.closest('.internal-embed, .markdown-embed, .markdown-embed-content, .popover, .codex-floating-tooltip, .mod-header');
 }
 
+/** Build snapshot of reading-view heading elements with line and tag indexes. */
 function buildReadingHeadingSnapshot(scroller: Element): ReadingHeadingSnapshot {
   const rendered = Array.from(scroller.querySelectorAll('h1, h2, h3, h4, h5, h6'))
     .filter(isUsableReadingHeading);
@@ -94,6 +92,7 @@ function buildReadingHeadingSnapshot(scroller: Element): ReadingHeadingSnapshot 
   return { entries, byLine, byTagAndText, byText, byTag };
 }
 
+/** Resolve the rendered reading-view heading element matching a chapter node from snapshot cache. */
 function resolveReadingHeading(
   snapshot: ReadingHeadingSnapshot,
   scroller: Element,
@@ -157,6 +156,7 @@ type ReadingHeadingObserverState = {
   restoreMockHooks?: () => void;
 };
 
+/** Compute a compact structural signature from first and last scroller children. */
 function getScrollerChildSignature(scroller: Element): string {
   const children = (scroller as Element & { children?: ArrayLike<Element> }).children;
   if (!children || typeof children.length !== 'number') return '';
@@ -172,18 +172,24 @@ function getScrollerChildSignature(scroller: Element): string {
   return `${length}:${first}:${last}`;
 }
 
+/** Check whether a DOM node is a heading or markdown preview section element. */
 function isHeadingOrSectionNode(node: unknown): boolean {
   if (!node || typeof node !== 'object') return false;
   const element = node as Element;
   const tag = String(element.tagName || '').toUpperCase();
   if (/^H[1-6]$/.test(tag)) return true;
   if (element.classList?.contains?.('markdown-preview-section')) return true;
-  if (typeof element.querySelector === 'function') {
-    return Boolean(element.querySelector('h1, h2, h3, h4, h5, h6, .markdown-preview-section'));
+  if (typeof (element as HTMLElement).find === 'function') {
+    return Boolean((element as HTMLElement).find('h1, h2, h3, h4, h5, h6, .markdown-preview-section'));
+  }
+  const query = (element as unknown as { querySelector?: (s: string) => Element | null }).querySelector;
+  if (typeof query === 'function') {
+    return Boolean(query.call(element, 'h1, h2, h3, h4, h5, h6, .markdown-preview-section'));
   }
   return false;
 }
 
+/** Determine whether DOM mutations contain changes to heading or section structures. */
 function didReadingHeadingsMutate(records?: MutationRecord[]): boolean {
   if (!Array.isArray(records) || records.length === 0) return true;
   for (const record of records) {
@@ -305,45 +311,16 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
   }
 
   override async onload(): Promise<void> {
-    const originalAddSettingTab = this.addSettingTab?.bind(this);
-    if (originalAddSettingTab) {
-      this.addSettingTab = (tab: PluginSettingTab) => {
-        const originalDisplay = typeof tab?.display === 'function' ? tab.display.bind(tab) : null;
-        if (originalDisplay) {
-          tab.display = () => {
-            originalDisplay();
-            const zh = isChineseLocale();
-            new Setting(tab.containerEl)
-              .setName(zh ? '开启滚动跨章节音效' : 'Enable scroll chapter tick sound')
-              .setDesc(zh
-                ? '仅控制滚动跨越章节时的刻度音；点击章节音效由上方拟物音效开关独立控制。'
-                : 'Controls only chapter-crossing ticks while scrolling. Click feedback remains controlled by the tactile sound setting above.')
-              .addToggle((toggle) => toggle
-                .setValue(this.settings.enableScrollSound === true)
-                .onChange(async (value) => {
-                  this.settings.enableScrollSound = value;
-                  await this.saveSettings();
-                }));
-          };
-        }
-        return originalAddSettingTab(tab);
+    const result = await super.onload();
+    const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
+    const soundEngineAny = this.soundEngine as unknown as (Record<string, unknown> & { __chapterScrollSoundGuarded?: boolean }) | undefined;
+    if (playScrollTick && soundEngineAny && !soundEngineAny.__chapterScrollSoundGuarded) {
+      soundEngineAny.__chapterScrollSoundGuarded = true;
+      this.soundEngine.playScrollTick = (volume: number) => {
+        if (this.settings?.enableScrollSound === true) playScrollTick(volume);
       };
     }
-
-    try {
-      const result = await super.onload();
-      const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
-      const soundEngineAny = this.soundEngine as unknown as (Record<string, unknown> & { __chapterScrollSoundGuarded?: boolean }) | undefined;
-      if (playScrollTick && soundEngineAny && !soundEngineAny.__chapterScrollSoundGuarded) {
-        soundEngineAny.__chapterScrollSoundGuarded = true;
-        this.soundEngine.playScrollTick = (volume: number) => {
-          if (this.settings?.enableScrollSound === true) playScrollTick(volume);
-        };
-      }
-      return result;
-    } finally {
-      if (originalAddSettingTab) this.addSettingTab = originalAddSettingTab;
-    }
+    return result;
   }
 
   /** Extract chapters and invalidate cache when heading fingerprints change. */
@@ -353,8 +330,10 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     parserSettings: unknown = this.settings
   ): ChapterNode[] {
     const filePath = typeof file?.path === 'string' ? file.path : '';
-    const cachedHeadings = file && filePath
-      ? this.app?.metadataCache?.getFileCache?.(file as TFile)?.headings
+    const isRealTFile = typeof TFile === 'function' && file instanceof TFile;
+    const isDuckFile = Boolean(file && filePath);
+    const cachedHeadings = (isRealTFile || isDuckFile)
+      ? ((this.app?.metadataCache?.getFileCache as ((f: unknown) => { headings?: HeadingCacheEntry[] }) | undefined)?.(file)?.headings)
       : undefined;
     const headings = Array.isArray(cachedHeadings) && cachedHeadings.length > 0
       ? cachedHeadings

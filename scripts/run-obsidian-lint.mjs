@@ -154,9 +154,7 @@ for (const name of [
   '@typescript-eslint/no-base-to-string',
   'import/no-unresolved',
   'obsidianmd/validate-manifest',
-  'obsidianmd/validate-license',
-  'obsidianmd/commands/no-command-in-command-id',
-  'obsidianmd/commands/no-plugin-id-in-command-id'
+  'obsidianmd/validate-license'
 ]) {
   scannerRules[name] = 'off';
 }

@@ -1,5 +1,6 @@
 import {
   Plugin,
+  Component,
   MarkdownView,
   MarkdownRenderer,
   PluginSettingTab,
@@ -7,9 +8,10 @@ import {
   SuggestModal,
   Menu,
   Notice,
+  TFile,
   type App,
   type PluginManifest,
-  type TFile,
+  type SettingDefinitionItem,
   type TAbstractFile,
   type ToggleComponent,
   type SliderComponent,
@@ -23,6 +25,38 @@ import {
 import { getLocale } from './constants';
 import { ChapterParser, ChapterParseCache, normalizeHeadingText } from './core/parser';
 import { SoundEngine } from './core/sound';
+
+const SafeComponent: typeof Component = typeof Component === 'function' ? Component : (class {
+  private _loaded = false;
+  private _cleanups: Array<() => unknown> = [];
+
+  /** Mark component as loaded and initialize lifecycle. */
+  load(): void {
+    this._loaded = true;
+  }
+
+  /** Mark component as unloaded and execute registered teardown callbacks. */
+  unload(): void {
+    this._loaded = false;
+    while (this._cleanups.length > 0) {
+      const cb = this._cleanups.pop();
+      try { cb?.(); } catch { /* ignore */ }
+    }
+  }
+
+  /** Add a child component. */
+  addChild<T extends Component>(child: T): T { return child; }
+
+  /** Remove a child component. */
+  removeChild<T extends Component>(child: T): T { return child; }
+
+  /** Register teardown callback to run when the component unloads. */
+  register(cb: () => unknown): void {
+    if (typeof cb === 'function') {
+      this._cleanups.push(cb);
+    }
+  }
+} as unknown as typeof Component);
 import type {
   PluginSettings,
   ReadingState,
@@ -30,6 +64,7 @@ import type {
   ChapterMarker,
   ChapterNode,
   ChapterLike,
+  HeadingCacheEntry,
   LegacyRenderResult,
   BookmarkKind,
   ChapterStatusLabel,
@@ -341,12 +376,17 @@ function updateHierarchyFolding(
   }
 }
 
+/** Quick switcher palette modal allowing search and navigation across outline chapters. */
 class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   plugin: ChapterPipelinePlugin;
   view: MarkdownView | (object & { file?: TFile });
   chapters: ChapterNode[];
+  component: Component = new SafeComponent();
+
+  /** Initialize suggestion modal with keyboard navigation, styles, and rendering lifecycle. */
   constructor(app: App, plugin: ChapterPipelinePlugin, view: MarkdownView | (object & { file?: TFile }), chapters: ChapterNode[]) {
     super(app);
+    this.component.load();
     this.plugin = plugin;
     this.view = view;
     this.chapters = chapters || [];
@@ -367,14 +407,23 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     }
   }
 
+  /** Clean up modal resources and unload the isolated markdown rendering component. */
+  override onClose(): void {
+    super.onClose();
+    this.component.unload();
+  }
+
+  /** Return all chapters available for outline search in this note. */
   getItems(): ChapterNode[] {
     return this.chapters;
   }
 
+  /** Return raw search text combining chapter title and excerpt. */
   getItemText(item: ChapterNode): string {
     return (item.title || '') + ' ' + (item.summaryMarkdown || '');
   }
 
+  /** Filter chapter items matching query tokens across titles, excerpts, levels, and bookmarks. */
   getSuggestions(query: string): ChapterNode[] {
     if (!query || !query.trim()) {
       return this.chapters;
@@ -415,6 +464,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     });
   }
 
+  /** Render suggestion item with level badge, formatted title, excerpt, and bookmark tags. */
   renderSuggestion(item: ChapterNode, el: HTMLElement): void {
     if (typeof el.empty === 'function') el.empty();
     if (typeof el.addClass === 'function') {
@@ -439,7 +489,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
       ? headerEl.createDiv({ cls: 'codex-modal-title' })
       : null;
     if (titleEl) {
-      void MarkdownRenderer.render(this.app, formatTitleForRender(item.title), titleEl, '', this.plugin);
+      void MarkdownRenderer.render(this.app, formatTitleForRender(item.title), titleEl, '', this.component);
     }
 
     if (this.plugin?.settings?.showExcerpt !== false && item.summaryMarkdown) {
@@ -447,7 +497,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
         ? el.createDiv({ cls: 'codex-modal-excerpt' })
         : null;
       if (excerptEl) {
-        void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerptEl, '', this.plugin);
+        void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerptEl, '', this.component);
       }
     }
 
@@ -465,6 +515,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     this.onChooseItem(item, evt);
   }
 
+  /** Navigate view to selected chapter with tactile click feedback. */
   onChooseItem(item: ChapterNode, evt: MouseEvent | KeyboardEvent): void {
     if (!item) return;
     if (this.plugin?.settings?.enableSound !== false) {
@@ -475,14 +526,252 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   }
 }
 
+/** Settings tab providing declarative settings on Obsidian 1.13.0+ and an imperative fallback for older versions. */
 class ChapterPipelineSettingTab extends PluginSettingTab {
   plugin: ChapterPipelinePlugin;
+
+  /** Initialize setting tab with plugin reference. */
   constructor(app: App, plugin: ChapterPipelinePlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
 
-  display() {
+  /** Return declarative setting definitions consumed by Obsidian 1.13.0+. */
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const strings = I18N[getLocale()] || I18N.en;
+    return [
+      {
+        name: (strings.showExcerptName as string) || 'Show excerpt',
+        desc: (strings.showExcerptDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'showExcerpt',
+          defaultValue: true
+        }
+      },
+      {
+        name: (strings.excerptLengthName as string) || 'Excerpt length',
+        desc: (strings.excerptLengthDesc as string) || '',
+        visible: () => this.plugin.settings.showExcerpt !== false,
+        control: {
+          type: 'slider',
+          key: 'excerptLength',
+          defaultValue: 140,
+          min: 60,
+          max: 300,
+          step: 10
+        }
+      },
+      {
+        name: (strings.ignoreH1Name as string) || 'Ignore first H1',
+        desc: (strings.ignoreH1Desc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'ignoreFirstH1',
+          defaultValue: false
+        }
+      },
+      {
+        name: (strings.dockPositionName as string) || 'Dock position',
+        desc: (strings.dockPositionDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'dockPosition',
+          defaultValue: 'left',
+          options: (strings.dockPositionOptions as Record<string, string>) || { left: 'Left', right: 'Right' }
+        }
+      },
+      {
+        name: (strings.hierarchyModeName as string) || 'Hierarchy display mode',
+        desc: (strings.hierarchyModeDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'hierarchyMode',
+          defaultValue: 'hover-expand',
+          options: (strings.hierarchyModeOptions as Record<string, string>) || {
+            all: 'Show all headings',
+            'hover-expand': 'Auto-collapse subheadings',
+            'active-branch': 'Active branch focus'
+          }
+        }
+      },
+      {
+        name: (strings.showProgressRailName as string) || 'Progress rail',
+        desc: (strings.showProgressRailDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'showProgressRail',
+          defaultValue: false
+        }
+      },
+      {
+        name: (strings.tooltipGlassmorphismName as string) || 'Frosted glass tooltip',
+        desc: (strings.tooltipGlassmorphismDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'tooltipGlassmorphism',
+          defaultValue: false
+        }
+      },
+      {
+        name: (strings.showChapterOrderName as string) || 'Chapter order numbers',
+        desc: (strings.showChapterOrderDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'showChapterOrder',
+          defaultValue: false
+        }
+      },
+      {
+        name: (strings.readingBookmarksEnabledName as string) || 'Reading progress bookmarks',
+        desc: (strings.readingBookmarksEnabledDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'readingBookmarksEnabled',
+          defaultValue: false
+        }
+      },
+      {
+        name: (strings.cleanupReadingBookmarksName as string) || 'Clean Up Invalid Bookmark Records',
+        desc: (strings.cleanupReadingBookmarksDesc as string) || '',
+        visible: () => this.plugin.settings.readingBookmarksEnabled === true,
+        action: () => {
+          const count = this.plugin.cleanupOrphanedReadingState();
+          this.plugin.showNotice(count > 0 ? t('cleanupSuccessNotice', { count }) : t('cleanupNoneNotice'));
+        }
+      },
+      {
+        name: (strings.maxLevelName as string) || 'Max heading level',
+        desc: (strings.maxLevelDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'maxHeadingLevel',
+          defaultValue: '2',
+          options: (strings.maxLevelOptions as Record<string, string>) || {
+            '2': 'H1 ~ H2',
+            '3': 'H1 ~ H3',
+            '4': 'H1 ~ H4',
+            '6': 'H1 ~ H6'
+          }
+        }
+      },
+      {
+        name: (strings.activeColorName as string) || 'Active chapter accent color',
+        desc: (strings.activeColorDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'activeColor',
+          defaultValue: '#3b82f6',
+          options: (strings.activeColorOptions as Record<string, string>) || {
+            '#3b82f6': 'Azure Blue (Default / Linear)',
+            '#8b5cf6': 'Violet (Geek)',
+            '#f59e0b': 'Sunset Amber (Warm)',
+            '#ec4899': 'Sakura Pink (Vibrant)',
+            'var(--interactive-accent)': 'Theme Accent Color',
+            'custom': 'Custom Color...'
+          }
+        }
+      },
+      {
+        name: (strings.customColorName as string) || 'Custom Active Indicator Color',
+        desc: (strings.customColorDesc as string) || '',
+        visible: () => {
+          const color = this.plugin.settings.activeColor;
+          const options = (strings.activeColorOptions as Record<string, string>) || {};
+          return color === 'custom' || !Object.keys(options).includes(color);
+        },
+        control: {
+          type: 'color',
+          key: 'customActiveColor',
+          defaultValue: '#3b82f6'
+        }
+      },
+      {
+        name: (strings.narrowThresholdName as string) || 'Narrow threshold',
+        desc: (strings.narrowThresholdDesc as string) || '',
+        control: {
+          type: 'slider',
+          key: 'narrowThreshold',
+          defaultValue: 600,
+          min: 350,
+          max: 700,
+          step: 10
+        }
+      },
+      {
+        name: (strings.enableSoundName as string) || 'Tactile sound',
+        desc: (strings.enableSoundDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'enableSound',
+          defaultValue: false
+        }
+      },
+      {
+        name: (strings.soundVolumeName as string) || 'Volume',
+        desc: (strings.soundVolumeDesc as string) || '',
+        control: {
+          type: 'slider',
+          key: 'soundVolume',
+          defaultValue: 50,
+          min: 0,
+          max: 100,
+          step: 5
+        }
+      },
+      {
+        name: (strings.enableScrollSoundName as string) || 'Enable scroll chapter tick sound',
+        desc: (strings.enableScrollSoundDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'enableScrollSound',
+          defaultValue: false
+        }
+      }
+    ];
+  }
+
+  /** Return the stored value for a declarative setting key. */
+  override getControlValue(key: string): unknown {
+    const settings = this.plugin.settings as Record<string, unknown>;
+    if (key === 'maxHeadingLevel') {
+      return String(settings[key] ?? '2');
+    }
+    return settings[key];
+  }
+
+  /** Persist changed value for a declarative setting and refresh all open Markdown views. */
+  override async setControlValue(key: string, value: unknown): Promise<void> {
+    const settings = this.plugin.settings as Record<string, unknown>;
+    if (key === 'maxHeadingLevel') {
+      settings[key] = parseInt(String(value), 10);
+    } else if (key === 'excerptLength' || key === 'narrowThreshold' || key === 'soundVolume') {
+      settings[key] = Number(value);
+    } else if (key === 'customActiveColor') {
+      const str = typeof value === 'string' ? value.trim() : '';
+      settings[key] = /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(str) ? str : (settings[key] || '#3b82f6');
+    } else {
+      settings[key] = value;
+    }
+    await this.plugin.saveSettings();
+    if (key === 'soundVolume' && this.plugin.settings?.enableSound !== false && this.plugin.soundEngine) {
+      this.plugin.soundEngine.playClick(Number(value));
+    }
+    this.plugin.updateAllMarkdownViews?.();
+    if (typeof (this as { refreshDomState?: () => void }).refreshDomState === 'function') {
+      (this as { refreshDomState?: () => void }).refreshDomState!();
+    } else if (typeof (this as { update?: () => void }).update === 'function') {
+      (this as { update?: () => void }).update!();
+    }
+  }
+
+  /** Render settings tab imperatively on Obsidian versions prior to 1.13.0. */
+  override display(): void {
+    this.renderTab();
+  }
+
+  /** Render settings controls imperatively into containerEl. */
+  private renderTab(): void {
     const { containerEl } = this;
     containerEl.empty();
 
@@ -511,7 +800,6 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
           slider
             .setLimits(60, 300, 10)
             .setValue(this.plugin.settings.excerptLength || 140)
-            .setDynamicTooltip()
             .onChange(async (value: number) => {
               this.plugin.settings.excerptLength = value;
               await this.plugin.saveSettings();
@@ -618,7 +906,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
             this.plugin.settings.readingBookmarksEnabled = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
-            this.display();
+            this.renderTab();
           })
       );
 
@@ -668,7 +956,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
             this.plugin.settings.activeColor = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
-            this.display();
+            this.renderTab();
           });
       });
 
@@ -693,7 +981,6 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
         slider
           .setLimits(350, 700, 10)
           .setValue(this.plugin.settings.narrowThreshold)
-          .setDynamicTooltip()
           .onChange(async (value: number) => {
             this.plugin.settings.narrowThreshold = value;
             await this.plugin.saveSettings();
@@ -722,7 +1009,6 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
         slider
           .setLimits(0, 100, 5)
           .setValue(this.plugin.settings.soundVolume !== undefined ? this.plugin.settings.soundVolume : 50)
-          .setDynamicTooltip()
           .onChange(async (value: number) => {
             this.plugin.settings.soundVolume = value;
             await this.plugin.saveSettings();
@@ -731,9 +1017,25 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
             }
           })
       );
+
+    const isZh = getLocale().startsWith('zh');
+    new Setting(containerEl)
+      .setName((strings.enableScrollSoundName as string) || (isZh ? '开启滚动跨章节音效' : 'Enable scroll chapter tick sound'))
+      .setDesc((strings.enableScrollSoundDesc as string) || (isZh
+        ? '仅控制滚动跨越章节时的刻度音；点击章节音效由上方拟物音效开关独立控制。'
+        : 'Controls only chapter-crossing ticks while scrolling. Click feedback remains controlled by the tactile sound setting above.'))
+      .addToggle((toggle: ToggleComponent) =>
+        toggle
+          .setValue(this.plugin.settings.enableScrollSound === true)
+          .onChange(async (value: boolean) => {
+            this.plugin.settings.enableScrollSound = value;
+            await this.plugin.saveSettings();
+          })
+      );
   }
 }
 
+/** Escape leading ordered-list digits in chapter titles to prevent accidental markdown list formatting. */
 function formatTitleForRender(title: unknown): string {
   if (!title) return '';
   return String(title)
@@ -742,10 +1044,12 @@ function formatTitleForRender(title: unknown): string {
     .replace(/^(\s*[-*+])\s+/g, '\\$1 ');
 }
 
+/** Create a blank reading state container initialized to version 2 schema. */
 function createEmptyReadingState(): ReadingState {
   return { version: 2, files: {} };
 }
 
+/** Validate and sanitize raw reading state data into a structured schema object. */
 function normalizeReadingState(readingState: unknown): ReadingState {
   const normalized: ReadingState = createEmptyReadingState();
   const files = readingState && typeof readingState === 'object' && !Array.isArray(readingState)
@@ -797,6 +1101,7 @@ class ChapterPipelinePlugin extends Plugin {
   renderVersions: Map<object, number>;
   scrollBindings: Map<Element | object, { scrollers?: HTMLElement[]; scroller?: HTMLElement; handler: (event: Event) => void }>;
   viewTooltips: Map<object, HTMLElement>;
+  viewTooltipComponents: Map<object, Component>;
   viewChapterSnapshots: WeakMap<object, ChapterNode[]>;
   soundEngine: SoundEngine;
   chapterCache: ChapterParseCache;
@@ -819,6 +1124,7 @@ class ChapterPipelinePlugin extends Plugin {
     this.renderVersions = new Map();
     this.scrollBindings = new Map();
     this.viewTooltips = new Map();
+    this.viewTooltipComponents = new Map();
     this.viewChapterSnapshots = new WeakMap();
     this.soundEngine = new SoundEngine();
     this.chapterCache = new ChapterParseCache(32);
@@ -935,7 +1241,7 @@ class ChapterPipelinePlugin extends Plugin {
 
     // 注册快捷跳转与章节搜索命令
     this.addCommand({
-      id: 'chapter-pipeline-jump-prev',
+      id: 'jump-prev',
       name: t('commandJumpPrev'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -950,7 +1256,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-jump-next',
+      id: 'jump-next',
       name: t('commandJumpNext'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -965,7 +1271,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-open-palette',
+      id: 'open-palette',
       name: t('commandOpenPalette'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -980,7 +1286,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-resume-last-chapter',
+      id: 'resume-last-chapter',
       name: t('commandResumeLastChapter'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -993,7 +1299,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-toggle-revisit-current',
+      id: 'toggle-revisit-current',
       name: t('commandToggleRevisit'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -1006,7 +1312,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-toggle-important-current',
+      id: 'toggle-important-current',
       name: t('commandToggleImportant'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -1019,7 +1325,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-clear-reading-bookmarks-current',
+      id: 'clear-reading-bookmarks-current',
       name: t('commandClearReadingBookmarks'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -1032,7 +1338,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-cleanup-reading-bookmarks',
+      id: 'cleanup-reading-bookmarks',
       name: t('commandCleanupReadingBookmarks'),
       checkCallback: (checking: boolean) => {
         if (this.settings.readingBookmarksEnabled !== true) return false;
@@ -1510,10 +1816,12 @@ class ChapterPipelinePlugin extends Plugin {
     file: TFile | { path?: string; stat?: { mtime?: number } } | null | undefined,
     parserSettings: unknown = this.settings
   ): ChapterNode[] {
-    const fileCache = (file && typeof file.path === 'string' && this.app && this.app.metadataCache && typeof this.app.metadataCache.getFileCache === 'function')
-      ? this.app.metadataCache.getFileCache(file as TFile)
+    const isRealTFile = typeof TFile === 'function' && file instanceof TFile;
+    const isDuckFile = Boolean(file && typeof (file as { path?: unknown })?.path === 'string');
+    const fileCache = ((isRealTFile || isDuckFile) && typeof this.app?.metadataCache?.getFileCache === 'function')
+      ? (this.app.metadataCache.getFileCache as (f: unknown) => { headings?: HeadingCacheEntry[] } | null)(file)
       : null;
-    let headings = fileCache ? fileCache.headings || [] : [];
+    let headings: HeadingCacheEntry[] = fileCache?.headings ? [...fileCache.headings] : [];
 
     // 若缓存尚未就绪，使用正则极速从正文提取标题作为保底，确保任何模式百分百加载
     if (!headings || headings.length === 0) {
@@ -1669,6 +1977,20 @@ class ChapterPipelinePlugin extends Plugin {
     return modal;
   }
 
+  /** Clean up any floating tooltip element and markdown component associated with a view. */
+  cleanupViewTooltip(view: object): void {
+    const oldTooltip = this.viewTooltips?.get(view);
+    if (oldTooltip) {
+      oldTooltip.remove();
+      this.viewTooltips.delete(view);
+    }
+    const oldComponent = this.viewTooltipComponents?.get(view);
+    if (oldComponent) {
+      oldComponent.unload();
+      this.viewTooltipComponents.delete(view);
+    }
+  }
+
   async attachStepperToView(view: MarkdownView | (object & { file?: TFile; contentEl?: HTMLElement })): Promise<LegacyRenderResult | undefined> {
     if (!view || !(view as { file?: TFile }).file) return;
 
@@ -1683,11 +2005,7 @@ class ChapterPipelinePlugin extends Plugin {
     const existing = container.querySelector('.codex-stepper-container');
     if (existing) existing.remove();
 
-    const oldTooltip = this.viewTooltips.get(view);
-    if (oldTooltip) {
-      oldTooltip.remove();
-      this.viewTooltips.delete(view);
-    }
+    this.cleanupViewTooltip(view);
 
     if (this.observers.has(container)) {
       (this.observers.get(container) as ResizeObserver | MutationObserver).disconnect();
@@ -1745,16 +2063,19 @@ class ChapterPipelinePlugin extends Plugin {
     const targetBody = doc ? (doc.body || doc) : (typeof document !== 'undefined' ? document.body : null);
     const floatingTooltip: HTMLElement | null = (targetBody && typeof targetBody.createDiv === 'function')
       ? targetBody.createDiv({ cls: 'codex-floating-tooltip' })
-      : ((doc && typeof doc.createElement === 'function')
+      : (typeof createDiv === 'function'
         ? (() => {
-            const el = doc.createElement('div');
-            el.className = 'codex-floating-tooltip';
+            const el = createDiv({ cls: 'codex-floating-tooltip' });
             if (targetBody && typeof targetBody.appendChild === 'function') {
               targetBody.appendChild(el);
             }
             return el;
           })()
-        : (typeof document !== 'undefined' && document.body?.createDiv ? document.body.createDiv({ cls: 'codex-floating-tooltip' }) : null));
+        : null);
+
+    const tooltipComponent = new SafeComponent();
+    tooltipComponent.load();
+    this.viewTooltipComponents.set(view, tooltipComponent);
 
     let tooltipId: string | null = null;
     if (floatingTooltip) {
@@ -1934,12 +2255,12 @@ class ChapterPipelinePlugin extends Plugin {
           text: `H${chap.level}`
         });
         const titleEl = headerEl.createDiv({ cls: 'codex-tooltip-title' });
-        void MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', this);
+        void MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', tooltipComponent);
 
         // 正文 3 行纯文本摘要（支持 KaTeX 公式渲染，彻底过滤 Callout 容器）
         if (this.settings.showExcerpt !== false && chap.summaryMarkdown) {
           const excerptEl = floatingTooltip.createDiv({ cls: 'codex-tooltip-excerpt' });
-          void MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', this);
+          void MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', tooltipComponent);
         }
 
         const statuses = this.getChapterStatusLabels(file, chap);
@@ -2234,11 +2555,19 @@ class ChapterPipelinePlugin extends Plugin {
     }) || scrollers[0];
   }
 
+  /** Clear temporary flash and jump highlight classes while preserving user markdown highlights. */
   clearFlashHighlights(container: HTMLElement | null | undefined): void {
-    if (!container || typeof container.querySelectorAll !== 'function') return;
-    const flashEls = container.querySelectorAll('.is-flashing, .flashing, .is-highlighted, .highlighted, .mod-highlighted');
+    if (!container) return;
+    const flashEls: HTMLElement[] = (typeof (container as { findAll?: (s: string) => HTMLElement[] }).findAll === 'function')
+      ? (container as { findAll: (s: string) => HTMLElement[] }).findAll('.is-flashing, .flashing, .is-highlighted, .highlighted, .mod-highlighted')
+      : (() => {
+          const query = (container as unknown as { querySelectorAll?: (s: string) => NodeListOf<Element> }).querySelectorAll;
+          return typeof query === 'function'
+            ? (Array.from(query.call(container, '.is-flashing, .flashing, .is-highlighted, .highlighted, .mod-highlighted')) as HTMLElement[])
+            : [];
+        })();
     for (let i = 0; i < flashEls.length; i++) {
-      const el = flashEls[i] as HTMLElement;
+      const el = flashEls[i];
       if (!el || !el.classList) continue;
       // Protect user <mark> and .cm-highlight elements (and any elements inside them)
       const isMark = (el.tagName && el.tagName.toLowerCase() === 'mark') || el.classList.contains('cm-highlight');
@@ -2838,13 +3167,25 @@ class ChapterPipelinePlugin extends Plugin {
       this.viewTooltips.forEach((tooltip: HTMLElement) => tooltip?.remove?.());
       this.viewTooltips.clear();
     }
-    if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
-      document.querySelectorAll('.codex-stepper-container').forEach((el: Element) => el.remove());
-      document.querySelectorAll('.codex-floating-tooltip').forEach((el: Element) => el.remove());
-    } else if (typeof document !== 'undefined' && document.body && typeof document.body.querySelectorAll === 'function') {
-      document.body.querySelectorAll('.codex-stepper-container').forEach((el: Element) => el.remove());
-      document.body.querySelectorAll('.codex-floating-tooltip').forEach((el: Element) => el.remove());
+    if (this.viewTooltipComponents) {
+      this.viewTooltipComponents.forEach((comp: Component) => comp?.unload?.());
+      this.viewTooltipComponents.clear();
     }
+    const doc = typeof document !== 'undefined' ? document : null;
+    const body = doc ? doc.body : null;
+    /** Safely remove DOM elements matching selector using either findAll or querySelectorAll. */
+    const removeElements = (selector: string): void => {
+      if (body && typeof (body as { findAll?: (s: string) => HTMLElement[] }).findAll === 'function') {
+        (body as { findAll: (s: string) => HTMLElement[] }).findAll(selector).forEach((el: Element) => el.remove());
+      } else {
+        const query = (doc as unknown as { querySelectorAll?: (s: string) => NodeListOf<Element> })?.querySelectorAll;
+        if (typeof query === 'function') {
+          Array.from(query.call(doc, selector)).forEach((el: Element) => el.remove());
+        }
+      }
+    };
+    removeElements('.codex-stepper-container');
+    removeElements('.codex-floating-tooltip');
   }
 }
 

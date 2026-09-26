@@ -8,7 +8,7 @@
 
 [![GitHub Release](https://img.shields.io/github/v/release/dreamfarer-space/obsidian-chapter-pipeline?style=flat-square&color=3b82f6&label=Release&sort=semver)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
 [![GitHub Downloads](https://img.shields.io/github/downloads/dreamfarer-space/obsidian-chapter-pipeline/total?style=flat-square&color=f59e0b&label=Downloads&logo=github)](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)
-[![Obsidian](https://img.shields.io/badge/声明最低版本-0.15.9-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
+[![Obsidian](https://img.shields.io/badge/声明最低版本-1.8.7-7c3aed?style=flat-square&logo=obsidian)](docs/COMMUNITY_SUBMISSION.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-10b981?style=flat-square)](LICENSE)
 
 [English](README.md) · **简体中文**
@@ -180,7 +180,7 @@ CI 还会验证生产构建后 `main.js` 不会出现未提交差异。
 
 ## 兼容性验证
 
-当前 `1.2.3` manifest 声明 `minAppVersion: 0.15.9`、`isDesktopOnly: true`。最近一次有记录的真实 Obsidian smoke matrix 在 2026-09-23 针对打包后的 `1.2.2` 执行，并在官方 Obsidian Desktop `0.15.9` 与 `1.13.7` 上通过。`1.2.3` 保留相同的兼容性/平台元数据，但包含审核与 UI 实现修正，因此这里不会把 `1.2.2` 的结果表述为一次独立的 `1.2.3` 真 App 测试。完整证据见 [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)。当前不声明 Android/iOS 支持。
+当前 `1.2.3` manifest 声明 `minAppVersion: 1.8.7`、`isDesktopOnly: true`。最近一次有记录的真实 Obsidian smoke matrix 在 2026-09-25 针对打包后的 `1.2.3` 执行，并在官方 Obsidian Desktop `1.8.7` 与 `1.13.7` 上通过。完整证据见 [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)。当前不声明 Android/iOS 支持。
 
 ## 隐私
 

@@ -1,4 +1,4 @@
-import { MarkdownRenderer, SuggestModal } from 'obsidian';
+import { Component, MarkdownRenderer, SuggestModal } from 'obsidian';
 import { DOM_CLASSES, translate } from '../constants';
 import type { ChapterNode } from '../types';
 
@@ -17,9 +17,12 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   private readonly plugin: ModalPlugin;
   private readonly view: { file?: unknown };
   private readonly chapters: ChapterNode[];
+  private readonly component = new Component();
 
+  /** Initialize suggestion modal with keyboard navigation, styles, and rendering lifecycle. */
   constructor(app: unknown, plugin: ModalPlugin, view: { file?: unknown }, chapters: ChapterNode[]) {
     super(app as never);
+    this.component.load();
     this.plugin = plugin;
     this.view = view;
     this.chapters = chapters || [];
@@ -31,10 +34,13 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     modalElement?.style?.setProperty('--codex-active-foreground', plugin.resolveActiveForeground?.(plugin.settings?.activeColor) || '#ffffff');
   }
 
+  /** Return all chapters available for outline search in this note. */
   getItems(): ChapterNode[] { return this.chapters; }
 
+  /** Return raw search text combining chapter title and excerpt. */
   getItemText(item: ChapterNode): string { return `${item.title || ''} ${item.summaryMarkdown || ''}`; }
 
+  /** Filter chapter items matching query tokens across titles, excerpts, levels, and bookmarks. */
   getSuggestions(query: string): ChapterNode[] {
     if (!query?.trim()) return this.chapters;
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -53,15 +59,16 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     });
   }
 
+  /** Render suggestion item with level badge, formatted title, excerpt, and bookmark tags. */
   renderSuggestion(item: ChapterNode, element: HTMLElement): void {
     element.replaceChildren();
     const header = element.createDiv({ cls: 'codex-modal-header' });
     header.createSpan({ cls: `codex-level-badge level-${Math.min(item.level, 6)}`, text: `H${item.level}` });
     const title = header.createDiv({ cls: 'codex-modal-title' });
-    void MarkdownRenderer.render(this.app, item.title, title, '', this.plugin as never);
+    void MarkdownRenderer.render(this.app, item.title, title, '', this.component);
     if (this.plugin.settings?.showExcerpt !== false && item.summaryMarkdown) {
       const excerpt = element.createDiv({ cls: 'codex-modal-excerpt' });
-      void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerpt, '', this.plugin as never);
+      void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerpt, '', this.component);
     }
     const statuses = this.plugin.getChapterStatusLabels?.(this.view.file, item) || [];
     if (statuses.length) {
@@ -70,11 +77,19 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     }
   }
 
+  /** Clean up modal resources and unload the markdown rendering component. */
+  override onClose(): void {
+    super.onClose();
+    this.component.unload();
+  }
+
+  /** Navigate view to selected chapter with tactile click feedback. */
   onChooseSuggestion(item: ChapterNode): void {
     if (this.plugin.settings?.enableSound !== false) this.plugin.soundEngine?.playClick(this.plugin.settings?.soundVolume ?? 50);
     this.plugin.jumpToHeading?.(this.view, item);
   }
 
+  /** Select suggestion and navigate to chapter. */
   onChooseItem(item: ChapterNode): void { this.onChooseSuggestion(item); }
 }
 

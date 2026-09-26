@@ -30,9 +30,11 @@ import type { ChapterNode, LegacyRenderResult } from './types';
 class TypedProductionPlugin extends ReadingPersistencePlugin {
   sessionCoordinator?: SessionCoordinator<object, ViewSession>;
 
+  /** Lazily initialize and return the session coordinator with unmount and tooltip cleanup. */
   private getSessionCoordinator(): SessionCoordinator<object, ViewSession> {
     this.sessionCoordinator ??= new SessionCoordinator<object, ViewSession>((view) => {
       this.disconnectReadingHeadingObserver(view);
+      this.cleanupViewTooltip?.(view);
     });
     return this.sessionCoordinator;
   }

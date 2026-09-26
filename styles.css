@@ -269,7 +269,7 @@ body .workspace-leaf .cm-highlight {
 .codex-dash-item.active .codex-dash-bar {
   box-shadow: none;
   opacity: 1;
-  background-color: var(--codex-active-color, #3b82f6) !important;
+  background-color: var(--codex-active-color, #3b82f6);
 }
 
 /* 当前项标注其在本笔记大纲中的序号。横线本身依然保持极简，但不再
@@ -299,7 +299,7 @@ body .workspace-leaf .cm-highlight {
 
 .codex-dash-item.active:hover .codex-dash-bar {
   opacity: 1;
-  background-color: var(--codex-active-color, #3b82f6) !important;
+  background-color: var(--codex-active-color, #3b82f6);
   filter: brightness(1.15);
 }
 
@@ -361,19 +361,19 @@ body .workspace-leaf .cm-highlight {
 
 /* 纯色实体背景降级 (当 tooltipGlassmorphism === false 时) */
 .codex-floating-tooltip.is-solid {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  background: var(--background-primary, #ffffff) !important;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--background-primary, #ffffff);
 }
 
 .theme-dark .codex-floating-tooltip.is-solid,
 body.theme-dark .codex-floating-tooltip.is-solid {
-  background: var(--background-primary, #1e1e1e) !important;
+  background: var(--background-primary, #1e1e1e);
 }
 
 .theme-light .codex-floating-tooltip.is-solid,
 body.theme-light .codex-floating-tooltip.is-solid {
-  background: var(--background-primary, #ffffff) !important;
+  background: var(--background-primary, #ffffff);
 }
 
 /* 头部区：微胶囊徽章 + 标题水平排列 */
@@ -424,11 +424,13 @@ body.theme-light .codex-floating-tooltip.is-solid {
 }
 
 /* 激活态徽章（当前阅读所在小节）：沉浸实心主题色 + 白字 + 柔和光晕 */
-.codex-level-badge.is-active {
-  background: var(--codex-active-color, #3b82f6) !important;
-  color: var(--codex-active-foreground, #ffffff) !important;
-  border-color: transparent !important;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.38), 0 0 2px rgba(59, 130, 246, 0.5) !important;
+.codex-level-badge.is-active,
+.codex-tooltip-header .codex-level-badge.is-active,
+.codex-modal-header .codex-level-badge.is-active {
+  background: var(--codex-active-color, #3b82f6);
+  color: var(--codex-active-foreground, #ffffff);
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.38), 0 0 2px rgba(59, 130, 246, 0.5);
   font-weight: 800;
 }
 
@@ -457,31 +459,31 @@ body.theme-light .codex-floating-tooltip.is-solid {
   line-height: inherit;
 }
 
-.codex-tooltip-title :is(h1, h2, h3, h4, h5, h6) {
-  margin: 0 !important;
-  padding: 0 !important;
-  display: inline !important;
-  font-size: inherit !important;
-  font-weight: inherit !important;
-  line-height: inherit !important;
+body .codex-tooltip-title :is(h1, h2, h3, h4, h5, h6) {
+  margin: 0;
+  padding: 0;
+  display: inline;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
-.codex-tooltip-title :is(ol, ul),
-.codex-modal-title :is(ol, ul) {
-  margin: 0 !important;
-  padding: 0 !important;
-  padding-inline-start: 0 !important;
-  padding-left: 0 !important;
-  list-style: none !important;
-  display: inline !important;
+body .codex-tooltip-title :is(ol, ul),
+body .codex-modal-title :is(ol, ul) {
+  margin: 0;
+  padding: 0;
+  padding-inline-start: 0;
+  padding-left: 0;
+  list-style: none;
+  display: inline;
 }
 
-.codex-tooltip-title li,
-.codex-modal-title li {
-  margin: 0 !important;
-  padding: 0 !important;
-  display: inline !important;
-  list-style: none !important;
+body .codex-tooltip-title li,
+body .codex-modal-title li {
+  margin: 0;
+  padding: 0;
+  display: inline;
+  list-style: none;
 }
 
 /* 正文摘要区：固定最多3行、支持 KaTeX 公式渲染、超出自动用 ... 截断、浅色未加粗 */
@@ -564,16 +566,16 @@ body.theme-light .codex-floating-tooltip.is-solid {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .codex-stepper-container,
-  .codex-dash-item,
-  .codex-dash-bar,
-  .codex-progress-indicator,
-  .codex-floating-tooltip,
-  .codex-level-badge,
-  .suggestion-item.codex-suggest-item,
-  .suggestion-item.codex-modal-item {
-    animation: none !important;
-    transition: none !important;
+  body .codex-stepper-container,
+  body .codex-dash-item,
+  body .codex-dash-bar,
+  body .codex-progress-indicator,
+  body .codex-floating-tooltip,
+  body .codex-level-badge,
+  body .suggestion-item.codex-suggest-item,
+  body .suggestion-item.codex-modal-item {
+    animation: none;
+    transition: none;
   }
 
   .codex-bookmark-marker,
@@ -592,10 +594,10 @@ body.theme-light .codex-floating-tooltip.is-solid {
     color: CanvasText;
   }
 
-  .codex-dash-bar,
-  .codex-progress-indicator {
-    background-color: Highlight !important;
-    box-shadow: none !important;
+  body .codex-dash-bar,
+  body .codex-progress-indicator {
+    background-color: Highlight;
+    box-shadow: none;
   }
 
   .codex-dash-item:focus-visible {

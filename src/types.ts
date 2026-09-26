@@ -62,7 +62,8 @@ export interface PluginSettings {
 }
 
 export interface HeadingPosition {
-  start: { line: number };
+  start: { line: number; col?: number; offset?: number };
+  end?: { line?: number; col?: number; offset?: number };
 }
 
 export interface HeadingCacheEntry {
