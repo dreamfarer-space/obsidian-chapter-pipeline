@@ -1,4 +1,4 @@
-import { PluginSettingTab, Setting } from 'obsidian';
+import { PluginSettingTab, Setting, type SettingDefinitionItem } from 'obsidian';
 import { getLocale, I18N } from '../constants';
 import type { PluginSettings } from '../types';
 
@@ -17,6 +17,55 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
   constructor(app: unknown, plugin: SettingsPlugin) {
     super(app as never, plugin as never);
     this.plugin = plugin;
+  }
+
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const strings = I18N[getLocale()] || I18N.en;
+    return [
+      {
+        id: 'showExcerpt',
+        name: strings.showExcerptName || 'Show excerpt',
+        desc: strings.showExcerptDesc || '',
+        control: {
+          type: 'toggle',
+          key: 'showExcerpt',
+          default: true
+        }
+      },
+      {
+        id: 'ignoreFirstH1',
+        name: strings.ignoreH1Name || 'Ignore first H1',
+        desc: strings.ignoreH1Desc || '',
+        control: {
+          type: 'toggle',
+          key: 'ignoreFirstH1',
+          default: false
+        }
+      },
+      {
+        id: 'readingBookmarksEnabled',
+        name: strings.readingBookmarksEnabledName || 'Reading progress',
+        desc: strings.readingBookmarksEnabledDesc || '',
+        control: {
+          type: 'toggle',
+          key: 'readingBookmarksEnabled',
+          default: false
+        }
+      },
+      {
+        id: 'narrowThreshold',
+        name: strings.narrowThresholdName || 'Narrow threshold',
+        desc: strings.narrowThresholdDesc || '',
+        control: {
+          type: 'slider',
+          key: 'narrowThreshold',
+          default: 350,
+          min: 350,
+          max: 700,
+          step: 10
+        }
+      }
+    ] as unknown as SettingDefinitionItem[];
   }
 
   display(): void {
@@ -51,7 +100,6 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
       .addSlider((slider) => slider
         .setLimits(min, max, step)
         .setValue(Number(this.plugin.settings[key] ?? min))
-        .setDynamicTooltip()
         .onChange(async (value) => {
           this.plugin.settings[key] = value;
           await this.plugin.saveSettings();

@@ -1,5 +1,4 @@
-import { Setting, PluginSettingTab, MarkdownView, type TFile } from 'obsidian';
-import { getLocale } from './constants';
+import { MarkdownView, TFile } from 'obsidian';
 import { normalizeHeadingText } from './core/parser';
 import { ChapterPipelineCoordinator } from './plugin-coordinator';
 import {
@@ -48,9 +47,6 @@ function fallbackHeadings(content: string): Array<{ heading: string; level: numb
   return headings;
 }
 
-function isChineseLocale(): boolean {
-  return getLocale() === 'zh';
-}
 
 function isUsableReadingHeading(element: Element): boolean {
   if (element.classList?.contains('inline-title')) return false;
@@ -178,8 +174,12 @@ function isHeadingOrSectionNode(node: unknown): boolean {
   const tag = String(element.tagName || '').toUpperCase();
   if (/^H[1-6]$/.test(tag)) return true;
   if (element.classList?.contains?.('markdown-preview-section')) return true;
-  if (typeof element.querySelector === 'function') {
-    return Boolean(element.querySelector('h1, h2, h3, h4, h5, h6, .markdown-preview-section'));
+  if (typeof (element as HTMLElement).find === 'function') {
+    return Boolean((element as HTMLElement).find('h1, h2, h3, h4, h5, h6, .markdown-preview-section'));
+  }
+  const query = (element as unknown as { querySelector?: (s: string) => Element | null }).querySelector;
+  if (typeof query === 'function') {
+    return Boolean(query.call(element, 'h1, h2, h3, h4, h5, h6, .markdown-preview-section'));
   }
   return false;
 }
@@ -305,45 +305,16 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
   }
 
   override async onload(): Promise<void> {
-    const originalAddSettingTab = this.addSettingTab?.bind(this);
-    if (originalAddSettingTab) {
-      this.addSettingTab = (tab: PluginSettingTab) => {
-        const originalDisplay = typeof tab?.display === 'function' ? tab.display.bind(tab) : null;
-        if (originalDisplay) {
-          tab.display = () => {
-            originalDisplay();
-            const zh = isChineseLocale();
-            new Setting(tab.containerEl)
-              .setName(zh ? '开启滚动跨章节音效' : 'Enable scroll chapter tick sound')
-              .setDesc(zh
-                ? '仅控制滚动跨越章节时的刻度音；点击章节音效由上方拟物音效开关独立控制。'
-                : 'Controls only chapter-crossing ticks while scrolling. Click feedback remains controlled by the tactile sound setting above.')
-              .addToggle((toggle) => toggle
-                .setValue(this.settings.enableScrollSound === true)
-                .onChange(async (value) => {
-                  this.settings.enableScrollSound = value;
-                  await this.saveSettings();
-                }));
-          };
-        }
-        return originalAddSettingTab(tab);
+    const result = await super.onload();
+    const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
+    const soundEngineAny = this.soundEngine as unknown as (Record<string, unknown> & { __chapterScrollSoundGuarded?: boolean }) | undefined;
+    if (playScrollTick && soundEngineAny && !soundEngineAny.__chapterScrollSoundGuarded) {
+      soundEngineAny.__chapterScrollSoundGuarded = true;
+      this.soundEngine.playScrollTick = (volume: number) => {
+        if (this.settings?.enableScrollSound === true) playScrollTick(volume);
       };
     }
-
-    try {
-      const result = await super.onload();
-      const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
-      const soundEngineAny = this.soundEngine as unknown as (Record<string, unknown> & { __chapterScrollSoundGuarded?: boolean }) | undefined;
-      if (playScrollTick && soundEngineAny && !soundEngineAny.__chapterScrollSoundGuarded) {
-        soundEngineAny.__chapterScrollSoundGuarded = true;
-        this.soundEngine.playScrollTick = (volume: number) => {
-          if (this.settings?.enableScrollSound === true) playScrollTick(volume);
-        };
-      }
-      return result;
-    } finally {
-      if (originalAddSettingTab) this.addSettingTab = originalAddSettingTab;
-    }
+    return result;
   }
 
   /** Extract chapters and invalidate cache when heading fingerprints change. */
@@ -353,8 +324,10 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     parserSettings: unknown = this.settings
   ): ChapterNode[] {
     const filePath = typeof file?.path === 'string' ? file.path : '';
-    const cachedHeadings = file && filePath
-      ? this.app?.metadataCache?.getFileCache?.(file as TFile)?.headings
+    const isRealTFile = typeof TFile === 'function' && file instanceof TFile;
+    const isDuckFile = Boolean(file && filePath);
+    const cachedHeadings = (isRealTFile || isDuckFile)
+      ? ((this.app?.metadataCache?.getFileCache as ((f: unknown) => { headings?: Array<{ heading: string; level: number; position?: { start?: { line?: number } } }> }) | undefined)?.(file)?.headings)
       : undefined;
     const headings = Array.isArray(cachedHeadings) && cachedHeadings.length > 0
       ? cachedHeadings

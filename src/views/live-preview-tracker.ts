@@ -111,7 +111,12 @@ export class LivePreviewTracker {
     if (!value) return false;
     const node = value as Element;
     if (typeof node.matches === 'function' && node.matches(CANDIDATE_SELECTOR)) return true;
-    return typeof node.querySelector === 'function' && Boolean(node.querySelector(CANDIDATE_SELECTOR));
+    const el = node as HTMLElement;
+    if (typeof el.find === 'function') {
+      return Boolean(el.find(CANDIDATE_SELECTOR));
+    }
+    const query = (node as unknown as { querySelector?: (s: string) => Element | null }).querySelector;
+    return typeof query === 'function' && Boolean(query.call(node, CANDIDATE_SELECTOR));
   }
 
   private isInsideCandidate(value: unknown): boolean {

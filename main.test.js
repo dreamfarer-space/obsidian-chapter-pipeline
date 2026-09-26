@@ -170,6 +170,14 @@ class FakeElement {
     return this.querySelectorAll(selector)[0] || null;
   }
 
+  find(selector) {
+    return this.querySelector(selector);
+  }
+
+  findAll(selector) {
+    return this.querySelectorAll(selector);
+  }
+
   querySelectorAll(selector) {
     const selectors = selector.split(',').map((part) => part.trim());
     const matches = [];
@@ -408,6 +416,16 @@ Module._load = function loadWithObsidianStub(request, parent, isMain) {
             }
           }
         }
+      },
+      Component: class Component {
+        load() {}
+        unload() {}
+        addChild(c) { return c; }
+        removeChild(c) { return c; }
+        register(cb) { if (typeof cb === 'function') cb(); }
+      },
+      TFile: class TFile {
+        constructor(path = '') { this.path = path; }
       },
       PluginSettingTab,
       Setting,
@@ -1129,22 +1147,22 @@ test('onload registers navigation and reading-bookmark commands', async () => {
   const plugin = new ChapterPipelinePlugin(app, {});
   await plugin.onload();
 
-  const prevCmd = plugin.commands.find(c => c.id === 'chapter-pipeline-jump-prev');
+  const prevCmd = plugin.commands.find(c => c.id === 'jump-prev');
   assert.ok(prevCmd, 'jump-prev command should be registered');
   assert.equal(prevCmd.name, 'Chapter Pipeline: Jump to previous chapter');
 
-  const nextCmd = plugin.commands.find(c => c.id === 'chapter-pipeline-jump-next');
+  const nextCmd = plugin.commands.find(c => c.id === 'jump-next');
   assert.ok(nextCmd, 'jump-next command should be registered');
   assert.equal(nextCmd.name, 'Chapter Pipeline: Jump to next chapter');
 
-  const paletteCmd = plugin.commands.find(c => c.id === 'chapter-pipeline-open-palette');
+  const paletteCmd = plugin.commands.find(c => c.id === 'open-palette');
   assert.ok(paletteCmd, 'open-palette command should be registered');
   assert.equal(paletteCmd.name, 'Chapter Pipeline: Search & switch chapter (Palette)');
 
-  const resumeCmd = plugin.commands.find(c => c.id === 'chapter-pipeline-resume-last-chapter');
-  const revisitCmd = plugin.commands.find(c => c.id === 'chapter-pipeline-toggle-revisit-current');
-  const importantCmd = plugin.commands.find(c => c.id === 'chapter-pipeline-toggle-important-current');
-  const clearCmd = plugin.commands.find(c => c.id === 'chapter-pipeline-clear-reading-bookmarks-current');
+  const resumeCmd = plugin.commands.find(c => c.id === 'resume-last-chapter');
+  const revisitCmd = plugin.commands.find(c => c.id === 'toggle-revisit-current');
+  const importantCmd = plugin.commands.find(c => c.id === 'toggle-important-current');
+  const clearCmd = plugin.commands.find(c => c.id === 'clear-reading-bookmarks-current');
   assert.equal(resumeCmd.name, 'Chapter Pipeline: Resume last chapter');
   assert.equal(revisitCmd.name, 'Chapter Pipeline: Toggle revisit bookmark for current chapter');
   assert.equal(importantCmd.name, 'Chapter Pipeline: Toggle important bookmark for current chapter');
@@ -1757,8 +1775,8 @@ test('user-facing strings follow Chinese Obsidian language and fall back to Engl
   const plugin = new ChapterPipelinePlugin(app, {});
   await plugin.onload();
 
-  const prevCommand = plugin.commands.find((command) => command.id === 'chapter-pipeline-jump-prev');
-  const resumeCommand = plugin.commands.find((command) => command.id === 'chapter-pipeline-resume-last-chapter');
+  const prevCommand = plugin.commands.find((command) => command.id === 'jump-prev');
+  const resumeCommand = plugin.commands.find((command) => command.id === 'resume-last-chapter');
   assert.equal(prevCommand.name, 'Chapter Pipeline：跳转至上一章节');
   assert.equal(resumeCommand.name, 'Chapter Pipeline：恢复上次阅读章节');
 

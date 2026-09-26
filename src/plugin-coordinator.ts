@@ -1,5 +1,6 @@
 import {
   Plugin,
+  Component,
   MarkdownView,
   MarkdownRenderer,
   PluginSettingTab,
@@ -7,9 +8,10 @@ import {
   SuggestModal,
   Menu,
   Notice,
+  TFile,
   type App,
   type PluginManifest,
-  type TFile,
+  type SettingDefinitionItem,
   type TAbstractFile,
   type ToggleComponent,
   type SliderComponent,
@@ -23,6 +25,14 @@ import {
 import { getLocale } from './constants';
 import { ChapterParser, ChapterParseCache, normalizeHeadingText } from './core/parser';
 import { SoundEngine } from './core/sound';
+
+const SafeComponent: typeof Component = typeof Component === 'function' ? Component : (class {
+  load(): void {}
+  unload(): void {}
+  addChild<T extends Component>(child: T): T { return child; }
+  removeChild<T extends Component>(child: T): T { return child; }
+  register(cb: () => unknown): void { if (typeof cb === 'function') cb(); }
+} as unknown as typeof Component);
 import type {
   PluginSettings,
   ReadingState,
@@ -345,6 +355,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   plugin: ChapterPipelinePlugin;
   view: MarkdownView | (object & { file?: TFile });
   chapters: ChapterNode[];
+  component: Component = new SafeComponent();
   constructor(app: App, plugin: ChapterPipelinePlugin, view: MarkdownView | (object & { file?: TFile }), chapters: ChapterNode[]) {
     super(app);
     this.plugin = plugin;
@@ -365,6 +376,11 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
         this.modalEl.style.setProperty('--codex-active-foreground', this.plugin?.resolveActiveForeground?.(this.plugin?.settings?.activeColor) || '#ffffff');
       }
     }
+  }
+
+  onClose(): void {
+    super.onClose();
+    this.component.unload();
   }
 
   getItems(): ChapterNode[] {
@@ -439,7 +455,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
       ? headerEl.createDiv({ cls: 'codex-modal-title' })
       : null;
     if (titleEl) {
-      void MarkdownRenderer.render(this.app, formatTitleForRender(item.title), titleEl, '', this.plugin);
+      void MarkdownRenderer.render(this.app, formatTitleForRender(item.title), titleEl, '', this.component);
     }
 
     if (this.plugin?.settings?.showExcerpt !== false && item.summaryMarkdown) {
@@ -447,7 +463,7 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
         ? el.createDiv({ cls: 'codex-modal-excerpt' })
         : null;
       if (excerptEl) {
-        void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerptEl, '', this.plugin);
+        void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerptEl, '', this.component);
       }
     }
 
@@ -482,7 +498,194 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
-  display() {
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    const strings = I18N[getLocale()] || I18N.en;
+    return [
+      {
+        id: 'showExcerpt',
+        name: (strings.showExcerptName as string) || 'Show excerpt',
+        desc: (strings.showExcerptDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'showExcerpt',
+          default: true
+        }
+      },
+      {
+        id: 'excerptLength',
+        name: (strings.excerptLengthName as string) || 'Excerpt length',
+        desc: (strings.excerptLengthDesc as string) || '',
+        control: {
+          type: 'slider',
+          key: 'excerptLength',
+          default: 140,
+          min: 60,
+          max: 300,
+          step: 10
+        }
+      },
+      {
+        id: 'ignoreFirstH1',
+        name: (strings.ignoreH1Name as string) || 'Ignore first H1',
+        desc: (strings.ignoreH1Desc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'ignoreFirstH1',
+          default: false
+        }
+      },
+      {
+        id: 'dockPosition',
+        name: (strings.dockPositionName as string) || 'Dock position',
+        desc: (strings.dockPositionDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'dockPosition',
+          default: 'left',
+          options: (strings.dockPositionOptions as Record<string, string>) || { left: 'Left', right: 'Right' }
+        }
+      },
+      {
+        id: 'hierarchyMode',
+        name: (strings.hierarchyModeName as string) || 'Hierarchy display mode',
+        desc: (strings.hierarchyModeDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'hierarchyMode',
+          default: 'hover-expand',
+          options: (strings.hierarchyModeOptions as Record<string, string>) || {
+            all: 'Show all headings',
+            'hover-expand': 'Auto-collapse subheadings',
+            'active-branch': 'Active branch focus'
+          }
+        }
+      },
+      {
+        id: 'showProgressRail',
+        name: (strings.showProgressRailName as string) || 'Progress rail',
+        desc: (strings.showProgressRailDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'showProgressRail',
+          default: true
+        }
+      },
+      {
+        id: 'tooltipGlassmorphism',
+        name: (strings.tooltipGlassmorphismName as string) || 'Frosted glass tooltip',
+        desc: (strings.tooltipGlassmorphismDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'tooltipGlassmorphism',
+          default: true
+        }
+      },
+      {
+        id: 'showChapterOrder',
+        name: (strings.showChapterOrderName as string) || 'Chapter order numbers',
+        desc: (strings.showChapterOrderDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'showChapterOrder',
+          default: false
+        }
+      },
+      {
+        id: 'readingBookmarksEnabled',
+        name: (strings.readingBookmarksEnabledName as string) || 'Reading progress bookmarks',
+        desc: (strings.readingBookmarksEnabledDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'readingBookmarksEnabled',
+          default: true
+        }
+      },
+      {
+        id: 'maxHeadingLevel',
+        name: (strings.maxLevelName as string) || 'Max heading level',
+        desc: (strings.maxLevelDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'maxHeadingLevel',
+          default: 6,
+          options: (strings.maxLevelOptions as Record<string, string>) || {
+            1: 'H1', 2: 'H2', 3: 'H3', 4: 'H4', 5: 'H5', 6: 'H6'
+          }
+        }
+      },
+      {
+        id: 'activeColor',
+        name: (strings.activeColorName as string) || 'Active chapter accent color',
+        desc: (strings.activeColorDesc as string) || '',
+        control: {
+          type: 'dropdown',
+          key: 'activeColor',
+          default: 'linear-blue',
+          options: (strings.activeColorOptions as Record<string, string>) || {
+            'theme-accent': 'Theme accent',
+            'linear-blue': 'Linear blue',
+            'purple': 'Purple',
+            'emerald': 'Emerald',
+            'amber': 'Amber',
+            'rose': 'Rose',
+            'custom': 'Custom'
+          }
+        }
+      },
+      {
+        id: 'narrowThreshold',
+        name: (strings.narrowThresholdName as string) || 'Narrow threshold',
+        desc: (strings.narrowThresholdDesc as string) || '',
+        control: {
+          type: 'slider',
+          key: 'narrowThreshold',
+          default: 600,
+          min: 350,
+          max: 700,
+          step: 10
+        }
+      },
+      {
+        id: 'enableSound',
+        name: (strings.enableSoundName as string) || 'Tactile sound',
+        desc: (strings.enableSoundDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'enableSound',
+          default: true
+        }
+      },
+      {
+        id: 'soundVolume',
+        name: (strings.soundVolumeName as string) || 'Volume',
+        desc: (strings.soundVolumeDesc as string) || '',
+        control: {
+          type: 'slider',
+          key: 'soundVolume',
+          default: 50,
+          min: 0,
+          max: 100,
+          step: 5
+        }
+      },
+      {
+        id: 'enableScrollSound',
+        name: (strings.enableScrollSoundName as string) || 'Enable scroll chapter tick sound',
+        desc: (strings.enableScrollSoundDesc as string) || '',
+        control: {
+          type: 'toggle',
+          key: 'enableScrollSound',
+          default: false
+        }
+      }
+    ] as unknown as SettingDefinitionItem[];
+  }
+
+  display(): void {
+    this.renderTab();
+  }
+
+  private renderTab(): void {
     const { containerEl } = this;
     containerEl.empty();
 
@@ -511,7 +714,6 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
           slider
             .setLimits(60, 300, 10)
             .setValue(this.plugin.settings.excerptLength || 140)
-            .setDynamicTooltip()
             .onChange(async (value: number) => {
               this.plugin.settings.excerptLength = value;
               await this.plugin.saveSettings();
@@ -618,7 +820,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
             this.plugin.settings.readingBookmarksEnabled = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
-            this.display();
+            this.renderTab();
           })
       );
 
@@ -668,7 +870,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
             this.plugin.settings.activeColor = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
-            this.display();
+            this.renderTab();
           });
       });
 
@@ -693,7 +895,6 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
         slider
           .setLimits(350, 700, 10)
           .setValue(this.plugin.settings.narrowThreshold)
-          .setDynamicTooltip()
           .onChange(async (value: number) => {
             this.plugin.settings.narrowThreshold = value;
             await this.plugin.saveSettings();
@@ -722,13 +923,27 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
         slider
           .setLimits(0, 100, 5)
           .setValue(this.plugin.settings.soundVolume !== undefined ? this.plugin.settings.soundVolume : 50)
-          .setDynamicTooltip()
           .onChange(async (value: number) => {
             this.plugin.settings.soundVolume = value;
             await this.plugin.saveSettings();
             if (this.plugin.settings.enableSound !== false) {
               this.plugin.soundEngine.playClick(value);
             }
+          })
+      );
+
+    const isZh = getLocale().startsWith('zh');
+    new Setting(containerEl)
+      .setName((strings.enableScrollSoundName as string) || (isZh ? '开启滚动跨章节音效' : 'Enable scroll chapter tick sound'))
+      .setDesc((strings.enableScrollSoundDesc as string) || (isZh
+        ? '仅控制滚动跨越章节时的刻度音；点击章节音效由上方拟物音效开关独立控制。'
+        : 'Controls only chapter-crossing ticks while scrolling. Click feedback remains controlled by the tactile sound setting above.'))
+      .addToggle((toggle: ToggleComponent) =>
+        toggle
+          .setValue(this.plugin.settings.enableScrollSound === true)
+          .onChange(async (value: boolean) => {
+            this.plugin.settings.enableScrollSound = value;
+            await this.plugin.saveSettings();
           })
       );
   }
@@ -797,6 +1012,7 @@ class ChapterPipelinePlugin extends Plugin {
   renderVersions: Map<object, number>;
   scrollBindings: Map<Element | object, { scrollers?: HTMLElement[]; scroller?: HTMLElement; handler: (event: Event) => void }>;
   viewTooltips: Map<object, HTMLElement>;
+  viewTooltipComponents: Map<object, Component>;
   viewChapterSnapshots: WeakMap<object, ChapterNode[]>;
   soundEngine: SoundEngine;
   chapterCache: ChapterParseCache;
@@ -819,6 +1035,7 @@ class ChapterPipelinePlugin extends Plugin {
     this.renderVersions = new Map();
     this.scrollBindings = new Map();
     this.viewTooltips = new Map();
+    this.viewTooltipComponents = new Map();
     this.viewChapterSnapshots = new WeakMap();
     this.soundEngine = new SoundEngine();
     this.chapterCache = new ChapterParseCache(32);
@@ -935,7 +1152,7 @@ class ChapterPipelinePlugin extends Plugin {
 
     // 注册快捷跳转与章节搜索命令
     this.addCommand({
-      id: 'chapter-pipeline-jump-prev',
+      id: 'jump-prev',
       name: t('commandJumpPrev'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -950,7 +1167,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-jump-next',
+      id: 'jump-next',
       name: t('commandJumpNext'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -965,7 +1182,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-open-palette',
+      id: 'open-palette',
       name: t('commandOpenPalette'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -980,7 +1197,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-resume-last-chapter',
+      id: 'resume-last-chapter',
       name: t('commandResumeLastChapter'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -993,7 +1210,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-toggle-revisit-current',
+      id: 'toggle-revisit-current',
       name: t('commandToggleRevisit'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -1006,7 +1223,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-toggle-important-current',
+      id: 'toggle-important-current',
       name: t('commandToggleImportant'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -1019,7 +1236,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-clear-reading-bookmarks-current',
+      id: 'clear-reading-bookmarks-current',
       name: t('commandClearReadingBookmarks'),
       checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -1032,7 +1249,7 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'chapter-pipeline-cleanup-reading-bookmarks',
+      id: 'cleanup-reading-bookmarks',
       name: t('commandCleanupReadingBookmarks'),
       checkCallback: (checking: boolean) => {
         if (this.settings.readingBookmarksEnabled !== true) return false;
@@ -1510,8 +1727,10 @@ class ChapterPipelinePlugin extends Plugin {
     file: TFile | { path?: string; stat?: { mtime?: number } } | null | undefined,
     parserSettings: unknown = this.settings
   ): ChapterNode[] {
-    const fileCache = (file && typeof file.path === 'string' && this.app && this.app.metadataCache && typeof this.app.metadataCache.getFileCache === 'function')
-      ? this.app.metadataCache.getFileCache(file as TFile)
+    const isRealTFile = typeof TFile === 'function' && file instanceof TFile;
+    const isDuckFile = Boolean(file && typeof (file as { path?: unknown })?.path === 'string');
+    const fileCache = ((isRealTFile || isDuckFile) && typeof this.app?.metadataCache?.getFileCache === 'function')
+      ? (this.app.metadataCache.getFileCache as (f: unknown) => { headings?: Array<{ heading: string; level: number; position?: { start?: { line?: number } } }> } | null)(file)
       : null;
     let headings = fileCache ? fileCache.headings || [] : [];
 
@@ -1688,6 +1907,11 @@ class ChapterPipelinePlugin extends Plugin {
       oldTooltip.remove();
       this.viewTooltips.delete(view);
     }
+    const oldComponent = this.viewTooltipComponents.get(view);
+    if (oldComponent) {
+      oldComponent.unload();
+      this.viewTooltipComponents.delete(view);
+    }
 
     if (this.observers.has(container)) {
       (this.observers.get(container) as ResizeObserver | MutationObserver).disconnect();
@@ -1745,16 +1969,18 @@ class ChapterPipelinePlugin extends Plugin {
     const targetBody = doc ? (doc.body || doc) : (typeof document !== 'undefined' ? document.body : null);
     const floatingTooltip: HTMLElement | null = (targetBody && typeof targetBody.createDiv === 'function')
       ? targetBody.createDiv({ cls: 'codex-floating-tooltip' })
-      : ((doc && typeof doc.createElement === 'function')
+      : (typeof createDiv === 'function'
         ? (() => {
-            const el = doc.createElement('div');
-            el.className = 'codex-floating-tooltip';
+            const el = createDiv({ cls: 'codex-floating-tooltip' });
             if (targetBody && typeof targetBody.appendChild === 'function') {
               targetBody.appendChild(el);
             }
             return el;
           })()
-        : (typeof document !== 'undefined' && document.body?.createDiv ? document.body.createDiv({ cls: 'codex-floating-tooltip' }) : null));
+        : null);
+
+    const tooltipComponent = new SafeComponent();
+    this.viewTooltipComponents.set(view, tooltipComponent);
 
     let tooltipId: string | null = null;
     if (floatingTooltip) {
@@ -1934,12 +2160,12 @@ class ChapterPipelinePlugin extends Plugin {
           text: `H${chap.level}`
         });
         const titleEl = headerEl.createDiv({ cls: 'codex-tooltip-title' });
-        void MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', this);
+        void MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', tooltipComponent);
 
         // 正文 3 行纯文本摘要（支持 KaTeX 公式渲染，彻底过滤 Callout 容器）
         if (this.settings.showExcerpt !== false && chap.summaryMarkdown) {
           const excerptEl = floatingTooltip.createDiv({ cls: 'codex-tooltip-excerpt' });
-          void MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', this);
+          void MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', tooltipComponent);
         }
 
         const statuses = this.getChapterStatusLabels(file, chap);
@@ -2235,10 +2461,17 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   clearFlashHighlights(container: HTMLElement | null | undefined): void {
-    if (!container || typeof container.querySelectorAll !== 'function') return;
-    const flashEls = container.querySelectorAll('.is-flashing, .flashing, .is-highlighted, .highlighted, .mod-highlighted');
+    if (!container) return;
+    const flashEls: HTMLElement[] = (typeof (container as { findAll?: (s: string) => HTMLElement[] }).findAll === 'function')
+      ? (container as { findAll: (s: string) => HTMLElement[] }).findAll('.is-flashing, .flashing, .is-highlighted, .highlighted, .mod-highlighted')
+      : (() => {
+          const query = (container as unknown as { querySelectorAll?: (s: string) => NodeListOf<Element> }).querySelectorAll;
+          return typeof query === 'function'
+            ? (Array.from(query.call(container, '.is-flashing, .flashing, .is-highlighted, .highlighted, .mod-highlighted')) as HTMLElement[])
+            : [];
+        })();
     for (let i = 0; i < flashEls.length; i++) {
-      const el = flashEls[i] as HTMLElement;
+      const el = flashEls[i];
       if (!el || !el.classList) continue;
       // Protect user <mark> and .cm-highlight elements (and any elements inside them)
       const isMark = (el.tagName && el.tagName.toLowerCase() === 'mark') || el.classList.contains('cm-highlight');
@@ -2838,13 +3071,24 @@ class ChapterPipelinePlugin extends Plugin {
       this.viewTooltips.forEach((tooltip: HTMLElement) => tooltip?.remove?.());
       this.viewTooltips.clear();
     }
-    if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
-      document.querySelectorAll('.codex-stepper-container').forEach((el: Element) => el.remove());
-      document.querySelectorAll('.codex-floating-tooltip').forEach((el: Element) => el.remove());
-    } else if (typeof document !== 'undefined' && document.body && typeof document.body.querySelectorAll === 'function') {
-      document.body.querySelectorAll('.codex-stepper-container').forEach((el: Element) => el.remove());
-      document.body.querySelectorAll('.codex-floating-tooltip').forEach((el: Element) => el.remove());
+    if (this.viewTooltipComponents) {
+      this.viewTooltipComponents.forEach((comp: Component) => comp?.unload?.());
+      this.viewTooltipComponents.clear();
     }
+    const doc = typeof document !== 'undefined' ? document : null;
+    const body = doc ? doc.body : null;
+    const removeElements = (selector: string) => {
+      if (body && typeof (body as { findAll?: (s: string) => HTMLElement[] }).findAll === 'function') {
+        (body as { findAll: (s: string) => HTMLElement[] }).findAll(selector).forEach((el: Element) => el.remove());
+      } else {
+        const query = (doc as unknown as { querySelectorAll?: (s: string) => NodeListOf<Element> })?.querySelectorAll;
+        if (typeof query === 'function') {
+          Array.from(query.call(doc, selector)).forEach((el: Element) => el.remove());
+        }
+      }
+    };
+    removeElements('.codex-stepper-container');
+    removeElements('.codex-floating-tooltip');
   }
 }
 
