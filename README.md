@@ -23,12 +23,12 @@ Chapter Pipeline turns long Obsidian notes into a compact, margin-mounted naviga
 
 It is designed for long technical notes, research documents, study material, documentation, and any workflow where you want fast chapter navigation without giving up screen space.
 
-## What's new in 1.2.3
+## What's new in 1.2.5
 
-- **Obsidian review hardening** — addresses review-blocker findings and refreshes release metadata for the current `1.2.3` package.
-- **UI implementation cleanup** — moves tooltip layer styling into plugin CSS and uses Obsidian's settings component API for the settings heading.
-- **Release metadata remains aligned** — plugin ID stays `chapter-pipeline`, `minAppVersion` remains `0.15.9`, and mobile support remains intentionally disabled with `isDesktopOnly: true`.
-- **Compatibility evidence is explicit** — the latest recorded real-app smoke run remains the packaged `1.2.2` build; see the submission checklist for the exact tested matrix instead of treating that evidence as a separate `1.2.3` smoke run.
+- **Full TypeScript runtime architecture** — completes retirement of the legacy runtime coordinator, unifying runtime lifecycle, view sessions, and event management under strongly-typed TypeScript modules.
+- **Obsidian review hardening** — resolves community review findings including tooltip lifecycle cleanup, settings reactivity, CSS class naming standards, and strict API safety.
+- **CodeQL & security hardening** — replaces regular-expression parsing with index-based scanners, eliminates innerHTML risks, and ensures clean resource disposal across Obsidian view transitions.
+- **Performance & resilience** — hardened scroll tracking, CodeMirror 6 viewport baseline synchronization, and robust bookmark identity persistence.
 
 See [Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases) for the full version history.
 
@@ -180,7 +180,7 @@ Architecture and implementation notes live in [`docs/`](docs/):
 
 ## Compatibility verification
 
-The current `1.2.3` manifest declares `minAppVersion: 1.8.7` and `isDesktopOnly: true`. The latest recorded real-app smoke matrix was run on the packaged `1.2.3` build on 2026-09-25 and passed on official Obsidian Desktop `1.8.7` and `1.13.7`. See [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) for the exact evidence. Android/iOS support is not currently claimed.
+The current `1.2.5` manifest declares `minAppVersion: 1.8.7` and `isDesktopOnly: true`. The latest recorded real-app smoke matrix was run on the packaged `1.2.5` build on 2026-09-26 and passed on official Obsidian Desktop `1.8.7` and `1.13.7`. See [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md) for the exact evidence. Android/iOS support is not currently claimed.
 
 ## Privacy
 

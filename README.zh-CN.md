@@ -23,12 +23,12 @@ Chapter Pipeline 把 Obsidian 长笔记的目录导航压缩成一条贴在正�
 
 它尤其适合长篇技术笔记、论文与科研记录、考研/课程资料、项目文档，以及任何需要频繁在章节之间跳转、又不希望目录占据屏幕空间的场景。
 
-## 1.2.3 更新
+## 1.2.5 更新
 
-- **Obsidian 审核加固**：针对审核 blocker 做修正，并刷新当前 `1.2.3` 发布包的版本元数据。
-- **UI 实现清理**：将 Tooltip 层级样式移到插件 CSS，并使用 Obsidian Settings 组件 API 生成设置页标题。
-- **发布元数据保持一致**：插件 ID 仍为 `chapter-pipeline`，`minAppVersion` 仍为 `0.15.9`，移动端继续通过 `isDesktopOnly: true` 暂不声明支持。
-- **兼容性证据明确区分**：最近一次有记录的真实 Obsidian smoke test 仍针对打包后的 `1.2.2`；具体测试矩阵见提交清单，不把它误写成一次独立的 `1.2.3` 真 App 测试。
+- **全面迁移 TypeScript 架构**：彻底淘汰旧版运行时协调器，将视图会话、滚动追踪、生命周期与设置管理全面统一至强类型 TypeScript 模块。
+- **Obsidian 社区审核规范合规**：全面修正社区审核提出的各项反馈，包括 Tooltip 实例生命周期安全释放、设置项响应式刷新、规范化 CSS 样式与 API 严谨调用。
+- **CodeQL 与安全性加固**：替换易受 DoS 影响的正则表达式为确定性扫描器，杜绝 innerHTML 安全隐患，确保视图切换与卸载时无内存与事件监听泄漏。
+- **性能与稳定性提升**：优化高频滚动事件分发、完善 CodeMirror 6 视口基线同步机制，提升复杂长笔记中的阅读定位与书签持久化可靠性。
 
 完整历史请查看 [GitHub Releases](https://github.com/dreamfarer-space/obsidian-chapter-pipeline/releases)。
 
@@ -180,7 +180,7 @@ CI 还会验证生产构建后 `main.js` 不会出现未提交差异。
 
 ## 兼容性验证
 
-当前 `1.2.3` manifest 声明 `minAppVersion: 1.8.7`、`isDesktopOnly: true`。最近一次有记录的真实 Obsidian smoke matrix 在 2026-09-25 针对打包后的 `1.2.3` 执行，并在官方 Obsidian Desktop `1.8.7` 与 `1.13.7` 上通过。完整证据见 [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)。当前不声明 Android/iOS 支持。
+当前 `1.2.5` manifest 声明 `minAppVersion: 1.8.7`、`isDesktopOnly: true`。最近一次有记录的真实 Obsidian smoke matrix 在 2026-09-26 针对打包后的 `1.2.5` 执行，并在官方 Obsidian Desktop `1.8.7` 与 `1.13.7` 上通过。完整证据见 [`docs/COMMUNITY_SUBMISSION.md`](docs/COMMUNITY_SUBMISSION.md)。当前不声明 Android/iOS 支持。
 
 ## 隐私
 
