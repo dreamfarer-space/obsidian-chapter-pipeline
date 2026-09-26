@@ -27,11 +27,35 @@ import { ChapterParser, ChapterParseCache, normalizeHeadingText } from './core/p
 import { SoundEngine } from './core/sound';
 
 const SafeComponent: typeof Component = typeof Component === 'function' ? Component : (class {
-  load(): void {}
-  unload(): void {}
+  private _loaded = false;
+  private _cleanups: Array<() => unknown> = [];
+
+  /** Mark component as loaded and initialize lifecycle. */
+  load(): void {
+    this._loaded = true;
+  }
+
+  /** Mark component as unloaded and execute registered teardown callbacks. */
+  unload(): void {
+    this._loaded = false;
+    while (this._cleanups.length > 0) {
+      const cb = this._cleanups.pop();
+      try { cb?.(); } catch { /* ignore */ }
+    }
+  }
+
+  /** Add a child component. */
   addChild<T extends Component>(child: T): T { return child; }
+
+  /** Remove a child component. */
   removeChild<T extends Component>(child: T): T { return child; }
-  register(cb: () => unknown): void { if (typeof cb === 'function') cb(); }
+
+  /** Register teardown callback to run when the component unloads. */
+  register(cb: () => unknown): void {
+    if (typeof cb === 'function') {
+      this._cleanups.push(cb);
+    }
+  }
 } as unknown as typeof Component);
 import type {
   PluginSettings,
@@ -40,6 +64,7 @@ import type {
   ChapterMarker,
   ChapterNode,
   ChapterLike,
+  HeadingCacheEntry,
   LegacyRenderResult,
   BookmarkKind,
   ChapterStatusLabel,
@@ -351,13 +376,16 @@ function updateHierarchyFolding(
   }
 }
 
+/** Quick switcher palette modal allowing search and navigation across outline chapters. */
 class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   plugin: ChapterPipelinePlugin;
   view: MarkdownView | (object & { file?: TFile });
   chapters: ChapterNode[];
   component: Component = new SafeComponent();
+
   constructor(app: App, plugin: ChapterPipelinePlugin, view: MarkdownView | (object & { file?: TFile }), chapters: ChapterNode[]) {
     super(app);
+    this.component.load();
     this.plugin = plugin;
     this.view = view;
     this.chapters = chapters || [];
@@ -378,7 +406,8 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     }
   }
 
-  onClose(): void {
+  /** Clean up modal resources and unload the isolated markdown rendering component. */
+  override onClose(): void {
     super.onClose();
     this.component.unload();
   }
@@ -491,68 +520,67 @@ class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   }
 }
 
+/** Settings tab providing declarative settings on Obsidian 1.13.0+ and an imperative fallback for older versions. */
 class ChapterPipelineSettingTab extends PluginSettingTab {
   plugin: ChapterPipelinePlugin;
+
   constructor(app: App, plugin: ChapterPipelinePlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
 
+  /** Return declarative setting definitions consumed by Obsidian 1.13.0+. */
   getSettingDefinitions(): SettingDefinitionItem[] {
     const strings = I18N[getLocale()] || I18N.en;
     return [
       {
-        id: 'showExcerpt',
         name: (strings.showExcerptName as string) || 'Show excerpt',
         desc: (strings.showExcerptDesc as string) || '',
         control: {
           type: 'toggle',
           key: 'showExcerpt',
-          default: true
+          defaultValue: true
         }
       },
       {
-        id: 'excerptLength',
         name: (strings.excerptLengthName as string) || 'Excerpt length',
         desc: (strings.excerptLengthDesc as string) || '',
+        visible: () => this.plugin.settings.showExcerpt !== false,
         control: {
           type: 'slider',
           key: 'excerptLength',
-          default: 140,
+          defaultValue: 140,
           min: 60,
           max: 300,
           step: 10
         }
       },
       {
-        id: 'ignoreFirstH1',
         name: (strings.ignoreH1Name as string) || 'Ignore first H1',
         desc: (strings.ignoreH1Desc as string) || '',
         control: {
           type: 'toggle',
           key: 'ignoreFirstH1',
-          default: false
+          defaultValue: false
         }
       },
       {
-        id: 'dockPosition',
         name: (strings.dockPositionName as string) || 'Dock position',
         desc: (strings.dockPositionDesc as string) || '',
         control: {
           type: 'dropdown',
           key: 'dockPosition',
-          default: 'left',
+          defaultValue: 'left',
           options: (strings.dockPositionOptions as Record<string, string>) || { left: 'Left', right: 'Right' }
         }
       },
       {
-        id: 'hierarchyMode',
         name: (strings.hierarchyModeName as string) || 'Hierarchy display mode',
         desc: (strings.hierarchyModeDesc as string) || '',
         control: {
           type: 'dropdown',
           key: 'hierarchyMode',
-          default: 'hover-expand',
+          defaultValue: 'hover-expand',
           options: (strings.hierarchyModeOptions as Record<string, string>) || {
             all: 'Show all headings',
             'hover-expand': 'Auto-collapse subheadings',
@@ -561,130 +589,173 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
         }
       },
       {
-        id: 'showProgressRail',
         name: (strings.showProgressRailName as string) || 'Progress rail',
         desc: (strings.showProgressRailDesc as string) || '',
         control: {
           type: 'toggle',
           key: 'showProgressRail',
-          default: true
+          defaultValue: false
         }
       },
       {
-        id: 'tooltipGlassmorphism',
         name: (strings.tooltipGlassmorphismName as string) || 'Frosted glass tooltip',
         desc: (strings.tooltipGlassmorphismDesc as string) || '',
         control: {
           type: 'toggle',
           key: 'tooltipGlassmorphism',
-          default: true
+          defaultValue: false
         }
       },
       {
-        id: 'showChapterOrder',
         name: (strings.showChapterOrderName as string) || 'Chapter order numbers',
         desc: (strings.showChapterOrderDesc as string) || '',
         control: {
           type: 'toggle',
           key: 'showChapterOrder',
-          default: false
+          defaultValue: false
         }
       },
       {
-        id: 'readingBookmarksEnabled',
         name: (strings.readingBookmarksEnabledName as string) || 'Reading progress bookmarks',
         desc: (strings.readingBookmarksEnabledDesc as string) || '',
         control: {
           type: 'toggle',
           key: 'readingBookmarksEnabled',
-          default: true
+          defaultValue: false
         }
       },
       {
-        id: 'maxHeadingLevel',
+        name: (strings.cleanupReadingBookmarksName as string) || 'Clean Up Invalid Bookmark Records',
+        desc: (strings.cleanupReadingBookmarksDesc as string) || '',
+        visible: () => this.plugin.settings.readingBookmarksEnabled === true,
+        action: () => {
+          const count = this.plugin.cleanupOrphanedReadingState();
+          this.plugin.showNotice(count > 0 ? t('cleanupSuccessNotice', { count }) : t('cleanupNoneNotice'));
+        }
+      },
+      {
         name: (strings.maxLevelName as string) || 'Max heading level',
         desc: (strings.maxLevelDesc as string) || '',
         control: {
           type: 'dropdown',
           key: 'maxHeadingLevel',
-          default: 6,
+          defaultValue: '2',
           options: (strings.maxLevelOptions as Record<string, string>) || {
-            1: 'H1', 2: 'H2', 3: 'H3', 4: 'H4', 5: 'H5', 6: 'H6'
+            '2': 'H1 ~ H2',
+            '3': 'H1 ~ H3',
+            '4': 'H1 ~ H4',
+            '6': 'H1 ~ H6'
           }
         }
       },
       {
-        id: 'activeColor',
         name: (strings.activeColorName as string) || 'Active chapter accent color',
         desc: (strings.activeColorDesc as string) || '',
         control: {
           type: 'dropdown',
           key: 'activeColor',
-          default: 'linear-blue',
+          defaultValue: '#3b82f6',
           options: (strings.activeColorOptions as Record<string, string>) || {
-            'theme-accent': 'Theme accent',
-            'linear-blue': 'Linear blue',
-            'purple': 'Purple',
-            'emerald': 'Emerald',
-            'amber': 'Amber',
-            'rose': 'Rose',
-            'custom': 'Custom'
+            '#3b82f6': 'Azure Blue (Default / Linear)',
+            '#8b5cf6': 'Violet (Geek)',
+            '#f59e0b': 'Sunset Amber (Warm)',
+            '#ec4899': 'Sakura Pink (Vibrant)',
+            'var(--interactive-accent)': 'Theme Accent Color',
+            'custom': 'Custom Color...'
           }
         }
       },
       {
-        id: 'narrowThreshold',
+        name: (strings.customColorName as string) || 'Custom Active Indicator Color',
+        desc: (strings.customColorDesc as string) || '',
+        visible: () => {
+          const color = this.plugin.settings.activeColor;
+          const options = (strings.activeColorOptions as Record<string, string>) || {};
+          return color === 'custom' || !Object.keys(options).includes(color);
+        },
+        control: {
+          type: 'color',
+          key: 'customActiveColor',
+          defaultValue: this.plugin.settings.customActiveColor || '#3b82f6'
+        }
+      },
+      {
         name: (strings.narrowThresholdName as string) || 'Narrow threshold',
         desc: (strings.narrowThresholdDesc as string) || '',
         control: {
           type: 'slider',
           key: 'narrowThreshold',
-          default: 600,
+          defaultValue: 600,
           min: 350,
           max: 700,
           step: 10
         }
       },
       {
-        id: 'enableSound',
         name: (strings.enableSoundName as string) || 'Tactile sound',
         desc: (strings.enableSoundDesc as string) || '',
         control: {
           type: 'toggle',
           key: 'enableSound',
-          default: true
+          defaultValue: false
         }
       },
       {
-        id: 'soundVolume',
         name: (strings.soundVolumeName as string) || 'Volume',
         desc: (strings.soundVolumeDesc as string) || '',
         control: {
           type: 'slider',
           key: 'soundVolume',
-          default: 50,
+          defaultValue: 50,
           min: 0,
           max: 100,
           step: 5
         }
       },
       {
-        id: 'enableScrollSound',
         name: (strings.enableScrollSoundName as string) || 'Enable scroll chapter tick sound',
         desc: (strings.enableScrollSoundDesc as string) || '',
         control: {
           type: 'toggle',
           key: 'enableScrollSound',
-          default: false
+          defaultValue: false
         }
       }
-    ] as unknown as SettingDefinitionItem[];
+    ];
   }
 
-  display(): void {
+  /** Return the stored value for a declarative setting key. */
+  override getControlValue(key: string): unknown {
+    const settings = this.plugin.settings as Record<string, unknown>;
+    if (key === 'maxHeadingLevel') {
+      return String(settings[key] ?? '2');
+    }
+    return settings[key];
+  }
+
+  /** Persist changed value for a declarative setting and refresh all open Markdown views. */
+  override async setControlValue(key: string, value: unknown): Promise<void> {
+    const settings = this.plugin.settings as Record<string, unknown>;
+    if (key === 'maxHeadingLevel') {
+      settings[key] = parseInt(String(value), 10);
+    } else if (key === 'excerptLength' || key === 'narrowThreshold' || key === 'soundVolume') {
+      settings[key] = Number(value);
+    } else {
+      settings[key] = value;
+    }
+    await this.plugin.saveSettings();
+    this.plugin.updateAllMarkdownViews?.();
+    if (typeof (this as { refreshDomState?: () => void }).refreshDomState === 'function') {
+      (this as { refreshDomState?: () => void }).refreshDomState!();
+    }
+  }
+
+  /** Render settings tab imperatively on Obsidian versions prior to 1.13.0. */
+  override display(): void {
     this.renderTab();
   }
 
+  /** Render settings controls imperatively into containerEl. */
   private renderTab(): void {
     const { containerEl } = this;
     containerEl.empty();
@@ -1730,9 +1801,9 @@ class ChapterPipelinePlugin extends Plugin {
     const isRealTFile = typeof TFile === 'function' && file instanceof TFile;
     const isDuckFile = Boolean(file && typeof (file as { path?: unknown })?.path === 'string');
     const fileCache = ((isRealTFile || isDuckFile) && typeof this.app?.metadataCache?.getFileCache === 'function')
-      ? (this.app.metadataCache.getFileCache as (f: unknown) => { headings?: Array<{ heading: string; level: number; position?: { start?: { line?: number } } }> } | null)(file)
+      ? (this.app.metadataCache.getFileCache as (f: unknown) => { headings?: HeadingCacheEntry[] } | null)(file)
       : null;
-    let headings = fileCache ? fileCache.headings || [] : [];
+    let headings: HeadingCacheEntry[] = fileCache?.headings ? [...fileCache.headings] : [];
 
     // 若缓存尚未就绪，使用正则极速从正文提取标题作为保底，确保任何模式百分百加载
     if (!headings || headings.length === 0) {
@@ -1980,6 +2051,7 @@ class ChapterPipelinePlugin extends Plugin {
         : null);
 
     const tooltipComponent = new SafeComponent();
+    tooltipComponent.load();
     this.viewTooltipComponents.set(view, tooltipComponent);
 
     let tooltipId: string | null = null;

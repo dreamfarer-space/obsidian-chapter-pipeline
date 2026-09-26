@@ -1,4 +1,4 @@
-import { MarkdownRenderer, SuggestModal } from 'obsidian';
+import { Component, MarkdownRenderer, SuggestModal } from 'obsidian';
 import { DOM_CLASSES, translate } from '../constants';
 import type { ChapterNode } from '../types';
 
@@ -17,9 +17,11 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
   private readonly plugin: ModalPlugin;
   private readonly view: { file?: unknown };
   private readonly chapters: ChapterNode[];
+  private readonly component = new Component();
 
   constructor(app: unknown, plugin: ModalPlugin, view: { file?: unknown }, chapters: ChapterNode[]) {
     super(app as never);
+    this.component.load();
     this.plugin = plugin;
     this.view = view;
     this.chapters = chapters || [];
@@ -58,16 +60,22 @@ export class ChapterSuggestModal extends SuggestModal<ChapterNode> {
     const header = element.createDiv({ cls: 'codex-modal-header' });
     header.createSpan({ cls: `codex-level-badge level-${Math.min(item.level, 6)}`, text: `H${item.level}` });
     const title = header.createDiv({ cls: 'codex-modal-title' });
-    void MarkdownRenderer.render(this.app, item.title, title, '', this.plugin as never);
+    void MarkdownRenderer.render(this.app, item.title, title, '', this.component);
     if (this.plugin.settings?.showExcerpt !== false && item.summaryMarkdown) {
       const excerpt = element.createDiv({ cls: 'codex-modal-excerpt' });
-      void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerpt, '', this.plugin as never);
+      void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerpt, '', this.component);
     }
     const statuses = this.plugin.getChapterStatusLabels?.(this.view.file, item) || [];
     if (statuses.length) {
       const status = element.createDiv({ cls: 'codex-modal-bookmark-status' });
       statuses.forEach((entry) => status.createSpan({ cls: `codex-bookmark-label ${entry.className}`, text: entry.label }));
     }
+  }
+
+  /** Clean up modal resources and unload the markdown rendering component. */
+  override onClose(): void {
+    super.onClose();
+    this.component.unload();
   }
 
   onChooseSuggestion(item: ChapterNode): void {

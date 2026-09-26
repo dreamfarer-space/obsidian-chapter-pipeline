@@ -243,11 +243,18 @@ class SuggestModal {
 
   open() {
     this.isOpen = true;
+    if (typeof this.onOpen === 'function') {
+      this.onOpen();
+    }
   }
 
   close() {
     this.isOpen = false;
+    if (typeof this.onClose === 'function') {
+      this.onClose();
+    }
   }
+  onClose() {}
 }
 
 class Menu {
@@ -418,11 +425,33 @@ Module._load = function loadWithObsidianStub(request, parent, isMain) {
         }
       },
       Component: class Component {
-        load() {}
-        unload() {}
+        constructor() {
+          this._loaded = false;
+          this._cleanups = [];
+        }
+        load() {
+          this._loaded = true;
+          if (typeof this.onload === 'function') {
+            this.onload();
+          }
+        }
+        unload() {
+          this._loaded = false;
+          while (this._cleanups.length > 0) {
+            const cb = this._cleanups.pop();
+            try { cb(); } catch (e) { /* ignore */ }
+          }
+          if (typeof this.onunload === 'function') {
+            this.onunload();
+          }
+        }
         addChild(c) { return c; }
         removeChild(c) { return c; }
-        register(cb) { if (typeof cb === 'function') cb(); }
+        register(cb) {
+          if (typeof cb === 'function') {
+            this._cleanups.push(cb);
+          }
+        }
       },
       TFile: class TFile {
         constructor(path = '') { this.path = path; }
@@ -2491,3 +2520,140 @@ test('keyboard focus and blur trigger formula tooltip visibility and handle coll
     'visible H1 item must retain tabindex="0"');
 });
 
+test('modal close and tooltip replacement unload components and release registered cleanups', async () => {
+  const { app, plugin, view } = createReadingHarness();
+  const chapters = [
+    { title: 'Chapter 1', level: 1, line: 0, headingIndex: 0, id: 'c1', summaryMarkdown: 'Preview' }
+  ];
+
+  // 1. ChapterSuggestModal lifecycle
+  const modal = new ChapterPipelinePlugin.ChapterSuggestModal(app, plugin, view, chapters);
+  assert.equal(modal.component._loaded, true, 'modal component should be loaded on instantiation');
+
+  let modalCleanupRan = false;
+  modal.component.register(() => {
+    modalCleanupRan = true;
+  });
+  assert.equal(modalCleanupRan, false, 'cleanup should not run immediately upon registration');
+
+  modal.close();
+  assert.equal(modal.component._loaded, false, 'modal component should be unloaded on close');
+  assert.equal(modalCleanupRan, true, 'registered cleanup should execute when modal closes');
+
+  // 2. TooltipComponent lifecycle on attach & replace
+  await plugin.attachStepperToView(view);
+  const tooltipComp1 = plugin.viewTooltipComponents.get(view);
+  assert.ok(tooltipComp1, 'tooltip component should be created on stepper attach');
+  assert.equal(tooltipComp1._loaded, true, 'tooltip component should be loaded');
+
+  let tooltip1CleanupRan = false;
+  tooltipComp1.register(() => {
+    tooltip1CleanupRan = true;
+  });
+  assert.equal(tooltip1CleanupRan, false);
+
+  // Reattaching to the same view replaces tooltip and unloads previous component
+  await plugin.attachStepperToView(view);
+  const tooltipComp2 = plugin.viewTooltipComponents.get(view);
+  assert.notEqual(tooltipComp1, tooltipComp2, 'reattaching should create a new tooltip component');
+  assert.equal(tooltipComp1._loaded, false, 'old tooltip component should be unloaded upon replacement');
+  assert.equal(tooltip1CleanupRan, true, 'old tooltip component cleanup should have executed');
+  assert.equal(tooltipComp2._loaded, true, 'new tooltip component should be loaded');
+
+  let tooltip2CleanupRan = false;
+  tooltipComp2.register(() => {
+    tooltip2CleanupRan = true;
+  });
+
+  // onunload unloads all active tooltip components
+  plugin.onunload();
+  assert.equal(tooltipComp2._loaded, false, 'active tooltip component should be unloaded on plugin onunload');
+  assert.equal(tooltip2CleanupRan, true, 'active tooltip cleanup should execute on onunload');
+});
+
+test('declarative settings tabs support defaultValue, get/setControlValue, view updates, and conditional visibility', async () => {
+  const { app } = createReadingHarness();
+  app.workspace.on = () => {};
+  app.workspace.onLayoutReady = () => {};
+  app.metadataCache = { on: () => {} };
+  const plugin = new ChapterPipelinePlugin(app, {});
+  await plugin.onload();
+
+  assert.ok(plugin.settingTab);
+  let viewsUpdated = 0;
+  plugin.updateAllMarkdownViews = () => { viewsUpdated++; };
+
+  const defs = plugin.settingTab.getSettingDefinitions();
+  assert.ok(Array.isArray(defs) && defs.length > 0);
+
+  // Verify none have id and controls have defaultValue
+  for (const item of defs) {
+    assert.equal(item.id, undefined, 'setting definition items should not have legacy id property');
+    if (item.control) {
+      assert.notEqual(item.control.defaultValue, undefined, `control for ${item.control.key} should specify defaultValue`);
+      assert.equal(item.control.default, undefined, `control for ${item.control.key} should not use legacy default property`);
+    }
+  }
+
+  // Verify getControlValue
+  assert.equal(plugin.settingTab.getControlValue('dockPosition'), 'left');
+  assert.equal(plugin.settingTab.getControlValue('showExcerpt'), true);
+
+  // Verify setControlValue triggers save and updateAllMarkdownViews
+  viewsUpdated = 0;
+  await plugin.settingTab.setControlValue('dockPosition', 'right');
+  assert.equal(plugin.settings.dockPosition, 'right');
+  assert.equal(viewsUpdated, 1);
+
+  // Verify customActiveColor visibility predicate
+  const customColorDef = defs.find((d) => d.control && d.control.key === 'customActiveColor');
+  assert.ok(customColorDef, 'customActiveColor definition should exist');
+  assert.equal(typeof customColorDef.visible, 'function');
+  assert.equal(customColorDef.visible(), false, 'custom color should be hidden when activeColor is default');
+
+  await plugin.settingTab.setControlValue('activeColor', 'custom');
+  assert.equal(customColorDef.visible(), true, 'custom color should be visible when activeColor is custom');
+
+  // Verify excerptLength visibility predicate
+  const excerptLenDef = defs.find((d) => d.control && d.control.key === 'excerptLength');
+  assert.ok(excerptLenDef, 'excerptLength definition should exist');
+  assert.equal(typeof excerptLenDef.visible, 'function');
+  assert.equal(excerptLenDef.visible(), true);
+  await plugin.settingTab.setControlValue('showExcerpt', false);
+  assert.equal(excerptLenDef.visible(), false, 'excerptLength should be hidden when showExcerpt is false');
+
+  // Verify bookmark cleanup action visibility and execution
+  const cleanupDef = defs.find((d) => typeof d.action === 'function');
+  assert.ok(cleanupDef, 'bookmark cleanup action definition should exist');
+  assert.equal(cleanupDef.visible(), false, 'cleanup action should be hidden when bookmarks are disabled');
+
+  await plugin.settingTab.setControlValue('readingBookmarksEnabled', true);
+  assert.equal(cleanupDef.visible(), true, 'cleanup action should be visible when bookmarks are enabled');
+
+  let cleanedUp = false;
+  plugin.cleanupOrphanedReadingState = () => {
+    cleanedUp = true;
+    return 1;
+  };
+  cleanupDef.action();
+  assert.equal(cleanedUp, true, 'action click should invoke cleanupOrphanedReadingState');
+
+  // Verify TypedChapterPipelineSettingTab in src/ui/settings-tab.ts
+  const TypedSettingTab = ChapterPipelinePlugin.TypedChapterPipelineSettingTab;
+  assert.ok(TypedSettingTab);
+  const mockPlugin = {
+    settings: { showExcerpt: true, ignoreFirstH1: false, readingBookmarksEnabled: false, narrowThreshold: 350 },
+    saveSettings: async () => {},
+    updateAllMarkdownViews: () => { viewsUpdated++; }
+  };
+  const typedTab = new TypedSettingTab(app, mockPlugin);
+  const typedDefs = typedTab.getSettingDefinitions();
+  for (const item of typedDefs) {
+    assert.equal(item.id, undefined);
+    assert.notEqual(item.control.defaultValue, undefined);
+  }
+  viewsUpdated = 0;
+  await typedTab.setControlValue('showExcerpt', false);
+  assert.equal(mockPlugin.settings.showExcerpt, false);
+  assert.equal(viewsUpdated, 1);
+});

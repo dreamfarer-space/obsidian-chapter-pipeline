@@ -19,56 +19,74 @@ export class ChapterPipelineSettingTab extends PluginSettingTab {
     this.plugin = plugin;
   }
 
+  /** Return declarative setting definitions consumed by Obsidian 1.13.0+. */
   getSettingDefinitions(): SettingDefinitionItem[] {
     const strings = I18N[getLocale()] || I18N.en;
     return [
       {
-        id: 'showExcerpt',
         name: strings.showExcerptName || 'Show excerpt',
         desc: strings.showExcerptDesc || '',
         control: {
           type: 'toggle',
           key: 'showExcerpt',
-          default: true
+          defaultValue: true
         }
       },
       {
-        id: 'ignoreFirstH1',
         name: strings.ignoreH1Name || 'Ignore first H1',
         desc: strings.ignoreH1Desc || '',
         control: {
           type: 'toggle',
           key: 'ignoreFirstH1',
-          default: false
+          defaultValue: false
         }
       },
       {
-        id: 'readingBookmarksEnabled',
         name: strings.readingBookmarksEnabledName || 'Reading progress',
         desc: strings.readingBookmarksEnabledDesc || '',
         control: {
           type: 'toggle',
           key: 'readingBookmarksEnabled',
-          default: false
+          defaultValue: false
         }
       },
       {
-        id: 'narrowThreshold',
         name: strings.narrowThresholdName || 'Narrow threshold',
         desc: strings.narrowThresholdDesc || '',
         control: {
           type: 'slider',
           key: 'narrowThreshold',
-          default: 350,
+          defaultValue: 350,
           min: 350,
           max: 700,
           step: 10
         }
       }
-    ] as unknown as SettingDefinitionItem[];
+    ];
   }
 
-  display(): void {
+  /** Return the stored value for a declarative setting key. */
+  override getControlValue(key: string): unknown {
+    return (this.plugin.settings as Record<string, unknown>)[key];
+  }
+
+  /** Persist changed value for a declarative setting and refresh all open Markdown views. */
+  override async setControlValue(key: string, value: unknown): Promise<void> {
+    const settings = this.plugin.settings as Record<string, unknown>;
+    if (key === 'narrowThreshold') {
+      settings[key] = Number(value);
+    } else {
+      settings[key] = value;
+    }
+    await this.plugin.saveSettings();
+    this.plugin.updateAllMarkdownViews?.();
+    if (typeof (this as { refreshDomState?: () => void }).refreshDomState === 'function') {
+      (this as { refreshDomState?: () => void }).refreshDomState!();
+    }
+  }
+
+  /** Render settings tab imperatively on Obsidian versions prior to 1.13.0. */
+  override display(): void {
     const strings = I18N[getLocale()] || I18N.en;
     this.containerEl.replaceChildren();
     new Setting(this.containerEl)

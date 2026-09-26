@@ -6,7 +6,7 @@ import {
   nextCalibrationState,
   type CalibrationState
 } from './runtime-helpers';
-import type { ChapterNode, ChapterLike, LegacyRenderResult } from './types';
+import type { ChapterNode, ChapterLike, HeadingCacheEntry, LegacyRenderResult } from './types';
 
 type LegacyPluginConstructor = { prototype: Record<string, unknown> };
 
@@ -327,7 +327,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     const isRealTFile = typeof TFile === 'function' && file instanceof TFile;
     const isDuckFile = Boolean(file && filePath);
     const cachedHeadings = (isRealTFile || isDuckFile)
-      ? ((this.app?.metadataCache?.getFileCache as ((f: unknown) => { headings?: Array<{ heading: string; level: number; position?: { start?: { line?: number } } }> }) | undefined)?.(file)?.headings)
+      ? ((this.app?.metadataCache?.getFileCache as ((f: unknown) => { headings?: HeadingCacheEntry[] }) | undefined)?.(file)?.headings)
       : undefined;
     const headings = Array.isArray(cachedHeadings) && cachedHeadings.length > 0
       ? cachedHeadings
