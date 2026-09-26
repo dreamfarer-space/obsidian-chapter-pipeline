@@ -1,4 +1,4 @@
-import { Setting } from 'obsidian';
+import { Setting, PluginSettingTab, MarkdownView, type TFile } from 'obsidian';
 import { getLocale } from './constants';
 import { normalizeHeadingText } from './core/parser';
 import { ChapterPipelineCoordinator } from './plugin-coordinator';
@@ -7,8 +7,9 @@ import {
   nextCalibrationState,
   type CalibrationState
 } from './runtime-helpers';
+import type { ChapterNode, ChapterLike, LegacyRenderResult } from './types';
 
-type LegacyPluginConstructor = { prototype: Record<string, any> };
+type LegacyPluginConstructor = { prototype: Record<string, unknown> };
 
 type ReadingHeadingEntry = {
   element: Element;
@@ -96,7 +97,7 @@ function buildReadingHeadingSnapshot(scroller: Element): ReadingHeadingSnapshot 
 function resolveReadingHeading(
   snapshot: ReadingHeadingSnapshot,
   scroller: Element,
-  chapter: any
+  chapter: ChapterLike
 ): Element | null {
   const targetTag = chapter?.level ? `H${chapter.level}`.toUpperCase() : '';
   const cleanNorm = normalizeHeadingText(chapter?.title || '');
@@ -142,8 +143,9 @@ function resolveReadingHeading(
     if (partial) return partial.element;
   }
 
-  if (Number.isInteger(chapter?.headingIndex)) {
-    return snapshot.entries[chapter.headingIndex]?.element ?? null;
+  const headingIndex = chapter?.headingIndex;
+  if (typeof headingIndex === 'number' && Number.isInteger(headingIndex)) {
+    return snapshot.entries[headingIndex]?.element ?? null;
   }
   return null;
 }
@@ -278,11 +280,11 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
   }
 
   override async loadSettings(): Promise<void> {
-    const persisted = await this.loadData?.();
+    const persisted = (await this.loadData?.()) as Record<string, unknown> | null | undefined;
     await super.loadSettings();
 
     const saved = persisted && typeof persisted === 'object' && !Array.isArray(persisted)
-      ? persisted as Record<string, unknown>
+      ? persisted
       : {};
     let changed = false;
 
@@ -305,7 +307,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
   override async onload(): Promise<void> {
     const originalAddSettingTab = this.addSettingTab?.bind(this);
     if (originalAddSettingTab) {
-      this.addSettingTab = (tab: any) => {
+      this.addSettingTab = (tab: PluginSettingTab) => {
         const originalDisplay = typeof tab?.display === 'function' ? tab.display.bind(tab) : null;
         if (originalDisplay) {
           tab.display = () => {
@@ -331,7 +333,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     try {
       const result = await super.onload();
       const playScrollTick = this.soundEngine?.playScrollTick?.bind(this.soundEngine);
-      const soundEngineAny = this.soundEngine as (Record<string, any> & { __chapterScrollSoundGuarded?: boolean }) | undefined;
+      const soundEngineAny = this.soundEngine as unknown as (Record<string, unknown> & { __chapterScrollSoundGuarded?: boolean }) | undefined;
       if (playScrollTick && soundEngineAny && !soundEngineAny.__chapterScrollSoundGuarded) {
         soundEngineAny.__chapterScrollSoundGuarded = true;
         this.soundEngine.playScrollTick = (volume: number) => {
@@ -344,10 +346,15 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     }
   }
 
-  override extractChapters(content: string, file: any, parserSettings: unknown = this.settings): any {
+  /** Extract chapters and invalidate cache when heading fingerprints change. */
+  override extractChapters(
+    content: string,
+    file: TFile | { path?: string } | null | undefined,
+    parserSettings: unknown = this.settings
+  ): ChapterNode[] {
     const filePath = typeof file?.path === 'string' ? file.path : '';
-    const cachedHeadings = filePath
-      ? this.app?.metadataCache?.getFileCache?.(file)?.headings
+    const cachedHeadings = file && filePath
+      ? this.app?.metadataCache?.getFileCache?.(file as TFile)?.headings
       : undefined;
     const headings = Array.isArray(cachedHeadings) && cachedHeadings.length > 0
       ? cachedHeadings
@@ -367,7 +374,8 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     return super.extractChapters(content, file, parserSettings);
   }
 
-  override getViewScrollers(container: HTMLElement | null, view: any = null): any[] {
+  /** Resolve scrollable elements for the active markdown view container. */
+  override getViewScrollers(container: HTMLElement | null, view: object | null = null): HTMLElement[] {
     if (!container) return [];
     if (
       view
@@ -380,7 +388,7 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
 
     const isReading = this.isReadingMode?.(view, container) === true;
     const selector = isReading ? '.markdown-preview-view' : '.cm-scroller';
-    const scroller = container.querySelector(selector);
+    const scroller = container.querySelector<HTMLElement>(selector);
     if (!scroller || typeof scroller.addEventListener !== 'function') return [];
 
     if (isReading) {
@@ -392,13 +400,14 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
         && Math.abs(Number(parent.scrollTop) || 0) > 0
         && Math.abs(Number(scroller.scrollTop) || 0) < 1
       );
-      if (parentIsVerifiedScrollSource) return [parent];
+      if (parentIsVerifiedScrollSource && parent) return [parent];
     }
 
     return [scroller];
   }
 
-  override getCurrentEditorTopLine(view: any, container?: any, chapters: any = []): any {
+  /** Calculate the active editor top line for live preview or source modes. */
+  override getCurrentEditorTopLine(view: object, container?: HTMLElement, chapters: ChapterNode[] = []): number {
     if (
       view
       && typeof this.app?.workspace?.getActiveViewOfType === 'function'
@@ -410,8 +419,10 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     return super.getCurrentEditorTopLine(view, container, chapters);
   }
 
-  override getReadingHeading(view: any, chapter: any): any {
-    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
+  /** Retrieve the rendered reading view heading corresponding to a chapter. */
+  override getReadingHeading(view: object, chapter: ChapterLike): Element | null {
+    const targetView = view as { contentEl?: HTMLElement };
+    const scroller = targetView?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
     if (!scroller) return super.getReadingHeading(view, chapter) ?? null;
 
     if (view && typeof view === 'object') {
@@ -461,8 +472,12 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
       : null;
   }
 
-  override async attachStepperToView(view: any): Promise<any> {
-    const scroller = view?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
+  /** Attach observer-guarded stepper to a view and tag layer styles. */
+  override async attachStepperToView(
+    view: MarkdownView | (object & { file?: TFile; contentEl?: HTMLElement })
+  ): Promise<LegacyRenderResult | undefined> {
+    const targetView = view as { contentEl?: HTMLElement };
+    const scroller = targetView?.contentEl?.querySelector?.('.markdown-preview-view') as Element | null;
     if (view && typeof view === 'object') {
       const previousScroller = this.viewReadingScrollers.get(view);
       if (previousScroller && previousScroller !== scroller) {
@@ -478,15 +493,24 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
     }
 
     const result = await super.attachStepperToView(view);
-    const tooltip = result?.tooltipElement ?? this.viewTooltips?.get?.(view);
+    const tooltip = result?.tooltipElement ?? (this.viewTooltips as Map<object, HTMLElement> | undefined)?.get?.(view);
     if (tooltip?.classList) {
       tooltip.classList.add('codex-floating-tooltip--view-layer');
     }
     return result;
   }
 
-  override jumpToHeading(view: any, chapter: any): any {
-    const targetView = view && view.file ? view : null;
+  /** Navigate reading or source view to a specified chapter heading. */
+  override jumpToHeading(view: object, chapter: ChapterLike | number): void {
+    const targetView = (view && typeof view === 'object' && 'file' in view && (view as { file?: unknown }).file)
+      ? (view as {
+        file?: unknown;
+        contentEl?: HTMLElement;
+        setEphemeralState?: (state: unknown) => void;
+        currentMode?: { applyScroll?: (line: number) => void };
+        previewMode?: { applyScroll?: (line: number) => void };
+      })
+      : null;
     const generation = targetView
       ? (this.jumpCalibrationGenerations.get(targetView) || 0) + 1
       : 0;
@@ -494,17 +518,18 @@ export class PerformanceCoordinatorPlugin extends ChapterPipelineCoordinator {
       this.jumpCalibrationGenerations.set(targetView, generation);
     }
 
-    const line = typeof chapter === 'number' ? chapter : chapter?.line;
+    const line = typeof chapter === 'number' ? chapter : (chapter as { line?: number })?.line;
     const isReading = targetView && this.isReadingMode?.(targetView, targetView.contentEl);
     const previewRoot = isReading
-      ? targetView.contentEl?.querySelector?.('.markdown-preview-view')
+      ? (targetView.contentEl?.querySelector?.('.markdown-preview-view') as HTMLElement | null)
       : null;
     const previewScroller = isReading
-      ? (this.getViewScroller?.(targetView.contentEl, targetView) || previewRoot)
+      ? (this.getViewScroller?.(targetView.contentEl || null, targetView) || previewRoot)
       : null;
 
     if (!targetView || line === undefined || !previewScroller) {
-      return super.jumpToHeading(view, chapter);
+      super.jumpToHeading(view, chapter);
+      return;
     }
 
     const headingText = typeof chapter === 'object' && chapter

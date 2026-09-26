@@ -9,13 +9,18 @@ import {
   resolveChapterIdentity
 } from './core/reading-identity';
 import { PerformanceCoordinatorPlugin } from './runtime-performance';
-import type { ChapterMarker, ChapterNode, FileLike, ReadingFileState } from './types';
+import type { ChapterMarker, ChapterNode, FileLike, PluginSettings, ReadingFileState, ReadingState } from './types';
 
 const MAX_FILE_CHAPTER_SNAPSHOTS = 32;
 
-type ReadingAwarePlugin = Record<string, any> & {
+type ReadingAwarePlugin = {
   fileChapterSnapshots?: Map<string, ChapterNode[]>;
   viewChapterSnapshots?: WeakMap<object, ChapterNode[]>;
+  getReadingFileState?: (file: FileLike, create?: boolean) => ReadingFileState | null | undefined;
+  ensureReadingState?: () => ReadingState;
+  scheduleReadingStateSave?: () => void;
+  showNotice?: (message: string) => void;
+  [key: string]: unknown;
 };
 
 type LegacyPluginConstructor = {
@@ -70,7 +75,7 @@ function findChapterMarkerEntry(
   chapter: ChapterNode,
   chapters: ChapterNode[]
 ): { key: string; marker: ChapterMarker } | null {
-  const fileState = plugin.getReadingFileState?.(file, false) as ReadingFileState | null | undefined;
+  const fileState = plugin.getReadingFileState?.(file, false);
   const markers = fileState?.markers;
   if (!markers) return null;
 
@@ -112,11 +117,12 @@ function readingNoticeText(key: 'resumeUnavailable' | 'resumeNotFound' | 'resume
 export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
   fileChapterSnapshots: Map<string, ChapterNode[]> = new Map<string, ChapterNode[]>();
 
+  /** Load persisted settings with type safety and fallback defaults. */
   override async loadSettings(): Promise<void> {
-    const loaded = await this.loadData?.();
+    const loaded = (await this.loadData?.()) as Record<string, unknown> | null | undefined;
     const loadedSettings = loaded && typeof loaded === 'object' && !Array.isArray(loaded) ? loaded : {};
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings);
-    const settings = this.settings as Record<string, any>;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedSettings as Partial<PluginSettings>);
+    const settings = this.settings as PluginSettings & Record<string, unknown>;
 
     if (settings.showExcerpt === undefined) settings.showExcerpt = true;
     if (typeof settings.excerptLength !== 'number' || settings.excerptLength < 60 || settings.excerptLength > 300) settings.excerptLength = 140;
@@ -136,7 +142,8 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     await this.saveSettings?.();
   }
 
-  override ensureReadingState(): any {
+  /** Ensure the reading state object exists and conforms to the v2 schema. */
+  override ensureReadingState(): ReadingState {
     const state = this.settings?.readingState;
     const rawFiles = (state as unknown as { files?: unknown } | undefined)?.files;
     const invalid = !state || typeof state !== 'object' || Array.isArray(state) ||
@@ -334,19 +341,21 @@ export class ReadingPersistencePlugin extends PerformanceCoordinatorPlugin {
     }
   }
 
-  override async migrateReadingState(oldPath: string, newPath: string): Promise<any> {
+  /** Migrate reading state and file chapter snapshots from old path to new path. */
+  override async migrateReadingState(oldPath: string, newPath: string): Promise<boolean> {
     const result = await super.migrateReadingState(oldPath, newPath);
     this.fileChapterSnapshots?.delete(oldPath);
-    return result;
+    return Boolean(result);
   }
 
-  override async pruneDeletedReadingState(deletedPath: string): Promise<any> {
+  /** Clean up reading state and snapshot caches for deleted paths or folders. */
+  override async pruneDeletedReadingState(deletedPath: string): Promise<number> {
     const result = await super.pruneDeletedReadingState(deletedPath);
     const prefix = deletedPath.endsWith('/') ? deletedPath : `${deletedPath}/`;
     for (const path of this.fileChapterSnapshots?.keys() ?? []) {
       if (path === deletedPath || path.startsWith(prefix)) this.fileChapterSnapshots?.delete(path);
     }
-    return result;
+    return typeof result === 'number' ? result : 0;
   }
 }
 

@@ -81,14 +81,14 @@ export function nextCalibrationState(
 }
 
 /** Merge persisted settings while keeping fresh sound/glassmorphism defaults lightweight. */
-export function mergeSettingsWithLightweightDefaults<T extends Record<string, any>>(
+export function mergeSettingsWithLightweightDefaults<T extends Record<string, unknown>>(
   defaults: T,
   persisted: unknown
 ): T {
   const saved = persisted && typeof persisted === 'object' && !Array.isArray(persisted)
     ? (persisted as Record<string, unknown>)
     : {};
-  const merged = Object.assign({}, defaults, saved) as Record<string, any>;
+  const merged = Object.assign({}, defaults, saved) as Record<string, unknown>;
 
   if (typeof merged.enableSound !== 'boolean') merged.enableSound = false;
   if (typeof merged.enableScrollSound !== 'boolean') merged.enableScrollSound = false;

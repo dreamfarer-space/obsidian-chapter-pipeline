@@ -105,3 +105,27 @@ export interface ScrollerLike {
   addEventListener?: (type: string, listener: (event: Event) => void, options?: boolean) => void;
   removeEventListener?: (type: string, listener: (event: Event) => void, options?: boolean) => void;
 }
+
+export interface LegacyRenderResult {
+  hostContainer: HTMLElement;
+  chapters: ChapterNode[];
+  stepperElement: HTMLElement;
+  dashElements: HTMLElement[];
+  tooltipElement: HTMLElement | null;
+  railIndicator: HTMLElement | null;
+  trackingContainer: HTMLElement | null;
+  releaseLegacyScrollTracking: () => void;
+  isCurrentMount: () => boolean;
+  mode: 'reading' | 'live-preview';
+}
+
+export type ChapterLike = ChapterNode | {
+  level?: number;
+  title?: string;
+  rawHeading?: string;
+  line?: number;
+  headingIndex?: number;
+  id?: string;
+  summaryMarkdown?: string;
+};
+

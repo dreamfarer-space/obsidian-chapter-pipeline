@@ -1,8 +1,40 @@
-import { Plugin, MarkdownView, MarkdownRenderer, PluginSettingTab, Setting, SuggestModal, Menu, Notice } from 'obsidian';
+import {
+  Plugin,
+  MarkdownView,
+  MarkdownRenderer,
+  PluginSettingTab,
+  Setting,
+  SuggestModal,
+  Menu,
+  Notice,
+  type App,
+  type PluginManifest,
+  type TFile,
+  type TAbstractFile,
+  type ToggleComponent,
+  type SliderComponent,
+  type DropdownComponent,
+  type ButtonComponent,
+  type ColorComponent,
+  type Editor,
+  type MarkdownFileInfo,
+  type WorkspaceLeaf
+} from 'obsidian';
 import { getLocale } from './constants';
 import { ChapterParser, ChapterParseCache, normalizeHeadingText } from './core/parser';
 import { SoundEngine } from './core/sound';
-import type { PluginSettings, ReadingState, ReadingFileState, ChapterMarker } from './types';
+import type {
+  PluginSettings,
+  ReadingState,
+  ReadingFileState,
+  ChapterMarker,
+  ChapterNode,
+  ChapterLike,
+  LegacyRenderResult,
+  BookmarkKind,
+  ChapterStatusLabel,
+  HierarchyMode
+} from './types';
 
 const DEFAULT_SETTINGS: PluginSettings = {
   minHeadingLevel: 1,
@@ -28,7 +60,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
   }
 };
 
-const I18N: Record<string, any> = {
+const I18N: Record<string, Record<string, unknown>> = {
   en: {
     tabTitle: 'Chapter Pipeline Settings',
     showExcerptName: 'Show 3-Line Excerpt Preview',
@@ -201,24 +233,25 @@ const I18N: Record<string, any> = {
 
 
 
-function t(key: any, variables: any = {}) {
+function t(key: string, variables: Record<string, unknown> = {}): string {
   const localeStrings = I18N[getLocale()] || I18N.en;
-  const value = localeStrings[key] !== undefined ? localeStrings[key] : I18N.en[key];
-  if (typeof value !== 'string') return value === undefined ? key : value;
-  return value.replace(/\{(\w+)\}/g, (match: any, name: any) => (
+  const enStrings = I18N.en;
+  const value = localeStrings[key] !== undefined ? localeStrings[key] : enStrings[key];
+  if (typeof value !== 'string') return value === undefined ? key : String(value);
+  return value.replace(/\{(\w+)\}/g, (match: string, name: string) => (
     variables[name] === undefined || variables[name] === null ? match : String(variables[name])
   ));
 }
 
-function resolveReadableForeground(color: any) {
+function resolveReadableForeground(color: unknown): string {
   const value = String(color || '').trim();
   const match = value.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
   if (!match) return '#ffffff';
   const hex = match[1].length === 3
-    ? match[1].split('').map((part: any) => part + part).join('')
+    ? match[1].split('').map((part: string) => part + part).join('')
     : match[1];
-  const channels = [0, 2, 4].map((offset: any) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
-  const linear = channels.map((channel: any) => (
+  const channels = [0, 2, 4].map((offset: number) => parseInt(hex.slice(offset, offset + 2), 16) / 255);
+  const linear = channels.map((channel: number) => (
     channel <= 0.03928 ? channel / 12.92 : Math.pow((channel + 0.055) / 1.055, 2.4)
   ));
   const luminance = 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
@@ -227,8 +260,12 @@ function resolveReadableForeground(color: any) {
   return contrastDark >= contrastWhite ? '#111827' : '#ffffff';
 }
 
-
-function updateHierarchyFolding(chapters: any, dashElements: any, activeIdx: any, hierarchyMode: any) {
+function updateHierarchyFolding(
+  chapters: ChapterNode[] | null | undefined,
+  dashElements: HTMLElement[] | null | undefined,
+  activeIdx: number,
+  hierarchyMode?: HierarchyMode
+): void {
   if (!chapters || !dashElements || dashElements.length === 0) return;
   const mode = hierarchyMode || 'all';
 
@@ -304,14 +341,11 @@ function updateHierarchyFolding(chapters: any, dashElements: any, activeIdx: any
   }
 }
 
-class ChapterSuggestModal extends (SuggestModal as any) {
-  plugin: any;
-  view: any;
-  chapters: any[];
-  declare app: any;
-  declare modalEl: any;
-  declare setPlaceholder: any;
-  constructor(app: any, plugin: any, view: any, chapters: any) {
+class ChapterSuggestModal extends SuggestModal<ChapterNode> {
+  plugin: ChapterPipelinePlugin;
+  view: MarkdownView | (object & { file?: TFile });
+  chapters: ChapterNode[];
+  constructor(app: App, plugin: ChapterPipelinePlugin, view: MarkdownView | (object & { file?: TFile }), chapters: ChapterNode[]) {
     super(app);
     this.plugin = plugin;
     this.view = view;
@@ -333,24 +367,24 @@ class ChapterSuggestModal extends (SuggestModal as any) {
     }
   }
 
-  getItems() {
+  getItems(): ChapterNode[] {
     return this.chapters;
   }
 
-  getItemText(item: any) {
+  getItemText(item: ChapterNode): string {
     return (item.title || '') + ' ' + (item.summaryMarkdown || '');
   }
 
-  getSuggestions(query: any) {
+  getSuggestions(query: string): ChapterNode[] {
     if (!query || !query.trim()) {
       return this.chapters;
     }
 
     const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    const file = this.view?.file;
+    const file = (this.view as { file?: TFile })?.file;
 
-    return this.chapters.filter((chap: any) => {
-      const markers = (this.plugin?.getChapterMarkers && file)
+    return this.chapters.filter((chap: ChapterNode) => {
+      const markers: Partial<ChapterMarker> = (file && this.plugin)
         ? (this.plugin.getChapterMarkers(file, chap) || {})
         : {};
 
@@ -358,7 +392,7 @@ class ChapterSuggestModal extends (SuggestModal as any) {
       const rawLower = (chap.rawHeading || '').toLowerCase();
       const excerptLower = (chap.summaryMarkdown || '').toLowerCase();
 
-      return tokens.every((token: any) => {
+      return tokens.every((token: string) => {
         const hMatch = token.match(/^h([1-6])$/i);
         if (hMatch) {
           return chap.level === parseInt(hMatch[1], 10);
@@ -381,7 +415,7 @@ class ChapterSuggestModal extends (SuggestModal as any) {
     });
   }
 
-  renderSuggestion(item: any, el: any) {
+  renderSuggestion(item: ChapterNode, el: HTMLElement): void {
     if (typeof el.empty === 'function') el.empty();
     if (typeof el.addClass === 'function') {
       el.addClass('codex-suggest-item', 'codex-modal-item');
@@ -405,7 +439,7 @@ class ChapterSuggestModal extends (SuggestModal as any) {
       ? headerEl.createDiv({ cls: 'codex-modal-title' })
       : null;
     if (titleEl) {
-      MarkdownRenderer.render(this.app, formatTitleForRender(item.title), titleEl, '', this.plugin);
+      void MarkdownRenderer.render(this.app, formatTitleForRender(item.title), titleEl, '', this.plugin);
     }
 
     if (this.plugin?.settings?.showExcerpt !== false && item.summaryMarkdown) {
@@ -413,20 +447,25 @@ class ChapterSuggestModal extends (SuggestModal as any) {
         ? el.createDiv({ cls: 'codex-modal-excerpt' })
         : null;
       if (excerptEl) {
-        MarkdownRenderer.render(this.app, item.summaryMarkdown, excerptEl, '', this.plugin);
+        void MarkdownRenderer.render(this.app, item.summaryMarkdown, excerptEl, '', this.plugin);
       }
     }
 
-    const statuses = this.plugin?.getChapterStatusLabels?.(this.view?.file, item) || [];
+    const statuses = this.plugin?.getChapterStatusLabels?.((this.view as { file?: TFile })?.file, item) || [];
     if (statuses.length > 0 && typeof el.createDiv === 'function') {
       const statusEl = el.createDiv({ cls: 'codex-modal-bookmark-status' });
-      statuses.forEach((status: any) => {
+      statuses.forEach((status: ChapterStatusLabel) => {
         statusEl.createSpan({ cls: `codex-bookmark-label ${status.className}`, text: status.label });
       });
     }
   }
 
-  onChooseItem(item: any, evt: any) {
+  /** Handle suggestion selection by triggering click sound and navigating to chapter. */
+  onChooseSuggestion(item: ChapterNode, evt: MouseEvent | KeyboardEvent): void {
+    this.onChooseItem(item, evt);
+  }
+
+  onChooseItem(item: ChapterNode, evt: MouseEvent | KeyboardEvent): void {
     if (!item) return;
     if (this.plugin?.settings?.enableSound !== false) {
       const vol = this.plugin?.settings?.soundVolume !== undefined ? this.plugin.settings.soundVolume : 50;
@@ -437,10 +476,8 @@ class ChapterSuggestModal extends (SuggestModal as any) {
 }
 
 class ChapterPipelineSettingTab extends PluginSettingTab {
-  plugin: any;
-  declare app: any;
-  declare containerEl: any;
-  constructor(app: any, plugin: any) {
+  plugin: ChapterPipelinePlugin;
+  constructor(app: App, plugin: ChapterPipelinePlugin) {
     super(app, plugin);
     this.plugin = plugin;
   }
@@ -449,17 +486,17 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    const strings = I18N[getLocale()] || I18N.en;
+    const strings = (I18N[getLocale()] || I18N.en) as Record<string, string | Record<string, string>>;
 
-    new Setting(containerEl).setName(strings.tabTitle).setHeading();
+    new Setting(containerEl).setName(strings.tabTitle as string).setHeading();
 
     new Setting(containerEl)
-      .setName(strings.showExcerptName)
-      .setDesc(strings.showExcerptDesc)
-      .addToggle((toggle: any) =>
+      .setName(strings.showExcerptName as string)
+      .setDesc(strings.showExcerptDesc as string)
+      .addToggle((toggle: ToggleComponent) =>
         toggle
           .setValue(this.plugin.settings.showExcerpt !== false)
-          .onChange(async (value: any) => {
+          .onChange(async (value: boolean) => {
             this.plugin.settings.showExcerpt = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -468,14 +505,14 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
 
     if (this.plugin.settings.showExcerpt !== false) {
       new Setting(containerEl)
-        .setName(strings.excerptLengthName || 'Excerpt length (characters)')
-        .setDesc(strings.excerptLengthDesc || 'Maximum length of excerpt text extracted for tooltip and palette previews (60 - 300).')
-        .addSlider((slider: any) =>
+        .setName((strings.excerptLengthName as string) || 'Excerpt length (characters)')
+        .setDesc((strings.excerptLengthDesc as string) || 'Maximum length of excerpt text extracted for tooltip and palette previews (60 - 300).')
+        .addSlider((slider: SliderComponent) =>
           slider
             .setLimits(60, 300, 10)
             .setValue(this.plugin.settings.excerptLength || 140)
             .setDynamicTooltip()
-            .onChange(async (value: any) => {
+            .onChange(async (value: number) => {
               this.plugin.settings.excerptLength = value;
               await this.plugin.saveSettings();
               this.plugin.updateAllMarkdownViews();
@@ -484,12 +521,12 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName(strings.ignoreH1Name)
-      .setDesc(strings.ignoreH1Desc)
-      .addToggle((toggle: any) =>
+      .setName(strings.ignoreH1Name as string)
+      .setDesc(strings.ignoreH1Desc as string)
+      .addToggle((toggle: ToggleComponent) =>
         toggle
           .setValue(this.plugin.settings.ignoreFirstH1)
-          .onChange(async (value: any) => {
+          .onChange(async (value: boolean) => {
             this.plugin.settings.ignoreFirstH1 = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -497,44 +534,46 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(strings.dockPositionName)
-      .setDesc(strings.dockPositionDesc)
-      .addDropdown((drop: any) => {
-        for (const [key, val] of Object.entries(strings.dockPositionOptions)) {
+      .setName(strings.dockPositionName as string)
+      .setDesc(strings.dockPositionDesc as string)
+      .addDropdown((drop: DropdownComponent) => {
+        const options = strings.dockPositionOptions as Record<string, string>;
+        for (const [key, val] of Object.entries(options)) {
           drop.addOption(key, val);
         }
         drop
           .setValue(this.plugin.settings.dockPosition || 'left')
-          .onChange(async (value: any) => {
-            this.plugin.settings.dockPosition = value;
+          .onChange(async (value: string) => {
+            this.plugin.settings.dockPosition = value as PluginSettings['dockPosition'];
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
           });
       });
 
     new Setting(containerEl)
-      .setName(strings.hierarchyModeName)
-      .setDesc(strings.hierarchyModeDesc)
-      .addDropdown((drop: any) => {
-        for (const [key, val] of Object.entries(strings.hierarchyModeOptions)) {
+      .setName(strings.hierarchyModeName as string)
+      .setDesc(strings.hierarchyModeDesc as string)
+      .addDropdown((drop: DropdownComponent) => {
+        const options = strings.hierarchyModeOptions as Record<string, string>;
+        for (const [key, val] of Object.entries(options)) {
           drop.addOption(key, val);
         }
         drop
           .setValue(this.plugin.settings.hierarchyMode || 'hover-expand')
-          .onChange(async (value: any) => {
-            this.plugin.settings.hierarchyMode = value;
+          .onChange(async (value: string) => {
+            this.plugin.settings.hierarchyMode = value as PluginSettings['hierarchyMode'];
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
           });
       });
 
     new Setting(containerEl)
-      .setName(strings.showProgressRailName)
-      .setDesc(strings.showProgressRailDesc)
-      .addToggle((toggle: any) =>
+      .setName(strings.showProgressRailName as string)
+      .setDesc(strings.showProgressRailDesc as string)
+      .addToggle((toggle: ToggleComponent) =>
         toggle
           .setValue(this.plugin.settings.showProgressRail === true)
-          .onChange(async (value: any) => {
+          .onChange(async (value: boolean) => {
             this.plugin.settings.showProgressRail = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -542,12 +581,12 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(strings.tooltipGlassmorphismName)
-      .setDesc(strings.tooltipGlassmorphismDesc)
-      .addToggle((toggle: any) =>
+      .setName(strings.tooltipGlassmorphismName as string)
+      .setDesc(strings.tooltipGlassmorphismDesc as string)
+      .addToggle((toggle: ToggleComponent) =>
         toggle
           .setValue(this.plugin.settings.tooltipGlassmorphism !== false)
-          .onChange(async (value: any) => {
+          .onChange(async (value: boolean) => {
             this.plugin.settings.tooltipGlassmorphism = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -555,27 +594,27 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName(strings.showChapterOrderName)
-      .setDesc(strings.showChapterOrderDesc)
-      .addToggle((toggle: any) =>
+      .setName(strings.showChapterOrderName as string)
+      .setDesc(strings.showChapterOrderDesc as string)
+      .addToggle((toggle: ToggleComponent) =>
         toggle
           .setValue(this.plugin.settings.showChapterOrder === true)
-          .onChange(async (value: any) => {
+          .onChange(async (value: boolean) => {
             this.plugin.settings.showChapterOrder = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
           })
       );
 
-    new Setting(containerEl).setName(strings.readingSectionTitle).setHeading();
+    new Setting(containerEl).setName(strings.readingSectionTitle as string).setHeading();
 
     new Setting(containerEl)
-      .setName(strings.readingBookmarksEnabledName)
-      .setDesc(strings.readingBookmarksEnabledDesc)
-      .addToggle((toggle: any) =>
+      .setName(strings.readingBookmarksEnabledName as string)
+      .setDesc(strings.readingBookmarksEnabledDesc as string)
+      .addToggle((toggle: ToggleComponent) =>
         toggle
           .setValue(this.plugin.settings.readingBookmarksEnabled === true)
-          .onChange(async (value: any) => {
+          .onChange(async (value: boolean) => {
             this.plugin.settings.readingBookmarksEnabled = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -585,11 +624,11 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
 
     if (this.plugin.settings.readingBookmarksEnabled === true) {
       new Setting(containerEl)
-        .setName(strings.cleanupReadingBookmarksName)
-        .setDesc(strings.cleanupReadingBookmarksDesc)
-        .addButton((btn: any) =>
+        .setName(strings.cleanupReadingBookmarksName as string)
+        .setDesc(strings.cleanupReadingBookmarksDesc as string)
+        .addButton((btn: ButtonComponent) =>
           btn
-            .setButtonText(strings.cleanupButtonText)
+            .setButtonText(strings.cleanupButtonText as string)
             .onClick(() => {
               const count = this.plugin.cleanupOrphanedReadingState();
               this.plugin.showNotice(count > 0 ? t('cleanupSuccessNotice', { count }) : t('cleanupNoneNotice'));
@@ -598,15 +637,16 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName(strings.maxLevelName)
-      .setDesc(strings.maxLevelDesc)
-      .addDropdown((drop: any) => {
-        for (const [key, val] of Object.entries(strings.maxLevelOptions)) {
+      .setName(strings.maxLevelName as string)
+      .setDesc(strings.maxLevelDesc as string)
+      .addDropdown((drop: DropdownComponent) => {
+        const options = strings.maxLevelOptions as Record<string, string>;
+        for (const [key, val] of Object.entries(options)) {
           drop.addOption(key, val);
         }
         drop
           .setValue(String(this.plugin.settings.maxHeadingLevel))
-          .onChange(async (value: any) => {
+          .onChange(async (value: string) => {
             this.plugin.settings.maxHeadingLevel = parseInt(value, 10);
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -614,16 +654,17 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
       });
 
     const colorSetting = new Setting(containerEl)
-      .setName(strings.activeColorName)
-      .setDesc(strings.activeColorDesc)
-      .addDropdown((drop: any) => {
-        for (const [key, val] of Object.entries(strings.activeColorOptions)) {
+      .setName(strings.activeColorName as string)
+      .setDesc(strings.activeColorDesc as string)
+      .addDropdown((drop: DropdownComponent) => {
+        const options = strings.activeColorOptions as Record<string, string>;
+        for (const [key, val] of Object.entries(options)) {
           drop.addOption(key, val);
         }
-        const isKnown = Object.keys(strings.activeColorOptions).includes(this.plugin.settings.activeColor);
+        const isKnown = Object.keys(options).includes(this.plugin.settings.activeColor);
         drop
           .setValue(isKnown ? this.plugin.settings.activeColor : 'custom')
-          .onChange(async (value: any) => {
+          .onChange(async (value: string) => {
             this.plugin.settings.activeColor = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -631,12 +672,13 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
           });
       });
 
-    const isCustomColor = this.plugin.settings.activeColor === 'custom' || !Object.keys(strings.activeColorOptions).includes(this.plugin.settings.activeColor);
+    const options = strings.activeColorOptions as Record<string, string>;
+    const isCustomColor = this.plugin.settings.activeColor === 'custom' || !Object.keys(options).includes(this.plugin.settings.activeColor);
     if (isCustomColor && typeof colorSetting.addColorPicker === 'function') {
-      colorSetting.addColorPicker((picker: any) =>
+      colorSetting.addColorPicker((picker: ColorComponent) =>
         picker
           .setValue(this.plugin.settings.customActiveColor || '#3b82f6')
-          .onChange(async (value: any) => {
+          .onChange(async (value: string) => {
             this.plugin.settings.customActiveColor = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
@@ -645,43 +687,43 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
     }
 
     new Setting(containerEl)
-      .setName(strings.narrowThresholdName)
-      .setDesc(strings.narrowThresholdDesc)
-      .addSlider((slider: any) =>
+      .setName(strings.narrowThresholdName as string)
+      .setDesc(strings.narrowThresholdDesc as string)
+      .addSlider((slider: SliderComponent) =>
         slider
           .setLimits(350, 700, 10)
           .setValue(this.plugin.settings.narrowThreshold)
           .setDynamicTooltip()
-          .onChange(async (value: any) => {
+          .onChange(async (value: number) => {
             this.plugin.settings.narrowThreshold = value;
             await this.plugin.saveSettings();
             this.plugin.updateAllMarkdownViews();
           })
       );
 
-    new Setting(containerEl).setName(strings.soundSectionTitle).setHeading();
+    new Setting(containerEl).setName(strings.soundSectionTitle as string).setHeading();
 
     new Setting(containerEl)
-      .setName(strings.enableSoundName)
-      .setDesc(strings.enableSoundDesc)
-      .addToggle((toggle: any) =>
+      .setName(strings.enableSoundName as string)
+      .setDesc(strings.enableSoundDesc as string)
+      .addToggle((toggle: ToggleComponent) =>
         toggle
           .setValue(this.plugin.settings.enableSound !== false)
-          .onChange(async (value: any) => {
+          .onChange(async (value: boolean) => {
             this.plugin.settings.enableSound = value;
             await this.plugin.saveSettings();
           })
       );
 
     new Setting(containerEl)
-      .setName(strings.soundVolumeName)
-      .setDesc(strings.soundVolumeDesc)
-      .addSlider((slider: any) =>
+      .setName(strings.soundVolumeName as string)
+      .setDesc(strings.soundVolumeDesc as string)
+      .addSlider((slider: SliderComponent) =>
         slider
           .setLimits(0, 100, 5)
           .setValue(this.plugin.settings.soundVolume !== undefined ? this.plugin.settings.soundVolume : 50)
           .setDynamicTooltip()
-          .onChange(async (value: any) => {
+          .onChange(async (value: number) => {
             this.plugin.settings.soundVolume = value;
             await this.plugin.saveSettings();
             if (this.plugin.settings.enableSound !== false) {
@@ -692,7 +734,7 @@ class ChapterPipelineSettingTab extends PluginSettingTab {
   }
 }
 
-function formatTitleForRender(title: any) {
+function formatTitleForRender(title: unknown): string {
   if (!title) return '';
   return String(title)
     .replace(/^(\s*\d+)\.\s+/g, '$1\\. ')
@@ -704,34 +746,35 @@ function createEmptyReadingState(): ReadingState {
   return { version: 2, files: {} };
 }
 
-function normalizeReadingState(readingState: any): ReadingState {
+function normalizeReadingState(readingState: unknown): ReadingState {
   const normalized: ReadingState = createEmptyReadingState();
   const files = readingState && typeof readingState === 'object' && !Array.isArray(readingState)
-    ? (readingState as { files?: Record<string, any> }).files
+    ? (readingState as { files?: Record<string, unknown> }).files
     : null;
   if (!files || typeof files !== 'object' || Array.isArray(files)) return normalized;
 
   for (const [path, rawFileState] of Object.entries(files)) {
     if (!path || !rawFileState || typeof rawFileState !== 'object' || Array.isArray(rawFileState)) continue;
 
-    const rawFile = rawFileState as Record<string, any>;
+    const rawFile = rawFileState as Record<string, unknown>;
     const fileState: ReadingFileState = { markers: {} };
-    const rawResume = rawFile.resume;
+    const rawResume = rawFile.resume as Record<string, unknown> | undefined;
     if (rawResume && typeof rawResume === 'object' && typeof rawResume.chapterId === 'string' && rawResume.chapterId) {
       fileState.resume = {
         chapterId: rawResume.chapterId,
         title: typeof rawResume.title === 'string' ? rawResume.title : '',
-        updatedAt: Number.isFinite(rawResume.updatedAt) ? rawResume.updatedAt : 0
+        updatedAt: typeof rawResume.updatedAt === 'number' && Number.isFinite(rawResume.updatedAt) ? rawResume.updatedAt : 0
       };
     }
 
-    const rawMarkers = rawFile.markers;
+    const rawMarkers = rawFile.markers as Record<string, unknown> | undefined;
     if (rawMarkers && typeof rawMarkers === 'object' && !Array.isArray(rawMarkers)) {
       for (const [chapterId, rawMarker] of Object.entries(rawMarkers)) {
         if (!chapterId || !rawMarker || typeof rawMarker !== 'object' || Array.isArray(rawMarker)) continue;
+        const markerObj = rawMarker as Record<string, unknown>;
         const marker: ChapterMarker = {
-          revisit: (rawMarker as Record<string, any>).revisit === true,
-          important: (rawMarker as Record<string, any>).important === true
+          revisit: markerObj.revisit === true,
+          important: markerObj.important === true
         };
         if (marker.revisit || marker.important) {
           fileState.markers[chapterId] = marker;
@@ -748,13 +791,13 @@ function normalizeReadingState(readingState: any): ReadingState {
 }
 
 class ChapterPipelinePlugin extends Plugin {
-  [key: string]: any;
-  observers: Map<any, any>;
-  viewObservers: Map<any, any>;
-  renderVersions: Map<any, any>;
-  scrollBindings: Map<any, any>;
-  viewTooltips: Map<any, any>;
-  viewChapterSnapshots: WeakMap<object, any>;
+  [key: string]: unknown;
+  observers: Map<Element, ResizeObserver | MutationObserver>;
+  viewObservers: Map<object, ResizeObserver | MutationObserver>;
+  renderVersions: Map<object, number>;
+  scrollBindings: Map<Element | object, { scrollers?: HTMLElement[]; scroller?: HTMLElement; handler: (event: Event) => void }>;
+  viewTooltips: Map<object, HTMLElement>;
+  viewChapterSnapshots: WeakMap<object, ChapterNode[]>;
   soundEngine: SoundEngine;
   chapterCache: ChapterParseCache;
   documentRevisions: Map<string, number>;
@@ -765,11 +808,11 @@ class ChapterPipelinePlugin extends Plugin {
   resumePromptedPaths: Set<string>;
   pendingFrames: Set<number>;
   tooltipCounter: number;
-  static ChapterSuggestModal: any = ChapterSuggestModal;
-  static ChapterParser: any = ChapterParser;
-  static SoundEngine: any = SoundEngine;
-  static updateHierarchyFolding: any = updateHierarchyFolding;
-  constructor(app: any, manifest: any) {
+  static ChapterSuggestModal = ChapterSuggestModal;
+  static ChapterParser = ChapterParser;
+  static SoundEngine = SoundEngine;
+  static updateHierarchyFolding = updateHierarchyFolding;
+  constructor(app: App, manifest: PluginManifest) {
     super(app, manifest);
     this.observers = new Map();
     this.viewObservers = new Map();
@@ -790,8 +833,8 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   /** Track every deferred frame so split views can be torn down without stale callbacks. */
-  scheduleFrame(callback: any) {
-    let frameId: any = null;
+  scheduleFrame(callback: () => void): number {
+    let frameId: number | null = null;
     frameId = window.requestAnimationFrame(() => {
       if (frameId !== null) this.pendingFrames.delete(frameId);
       callback();
@@ -806,18 +849,18 @@ class ChapterPipelinePlugin extends Plugin {
 
     if (this.app.vault && typeof this.app.vault.on === 'function') {
       this.registerEvent(
-        this.app.vault.on('rename', (file: any, oldPath: any) => {
+        this.app.vault.on('rename', (file: TAbstractFile, oldPath: string) => {
           if (file?.path && oldPath) {
             this.chapterCache.deleteByPrefix(`${oldPath}|`);
             const revision = this.documentRevisions.get(oldPath);
             this.documentRevisions.delete(oldPath);
             if (revision !== undefined) this.documentRevisions.set(file.path, revision);
-            this.migrateReadingState(oldPath, file.path);
+            void this.migrateReadingState(oldPath, file.path);
           }
         })
       );
       this.registerEvent(
-        this.app.vault.on('delete', (file: any) => {
+        this.app.vault.on('delete', (file: TAbstractFile) => {
           if (file?.path) {
             this.chapterCache.deleteByPrefix(`${file.path}|`);
             this.documentRevisions.delete(file.path);
@@ -825,7 +868,7 @@ class ChapterPipelinePlugin extends Plugin {
             for (const path of this.documentRevisions.keys()) {
               if (path.startsWith(`${file.path}/`)) this.documentRevisions.delete(path);
             }
-            this.pruneDeletedReadingState(file.path);
+            void this.pruneDeletedReadingState(file.path);
           }
         })
       );
@@ -854,9 +897,9 @@ class ChapterPipelinePlugin extends Plugin {
       );
 
       // 监听编辑模式输入（防抖实时刷新章节大纲）
-      let editorChangeTimeout: any = null;
+      let editorChangeTimeout: number | null = null;
       this.registerEvent(
-        this.app.workspace.on('editor-change', (editor: any, info: any) => {
+        this.app.workspace.on('editor-change', (_editor: Editor, info: MarkdownView | MarkdownFileInfo) => {
           if (info?.file?.path) {
             this.documentRevisions.set(info.file.path, (this.documentRevisions.get(info.file.path) || 0) + 1);
             this.chapterCache.deleteByPrefix(`${info.file.path}|`);
@@ -866,7 +909,7 @@ class ChapterPipelinePlugin extends Plugin {
             if (info && info.file) {
               const activeView = this.app.workspace?.getActiveViewOfType ? this.app.workspace.getActiveViewOfType(MarkdownView) : null;
               if (activeView && activeView.file && activeView.file.path === info.file.path) {
-                this.attachStepperToView(activeView);
+                void this.attachStepperToView(activeView);
               }
             }
           }, 300);
@@ -877,14 +920,14 @@ class ChapterPipelinePlugin extends Plugin {
     // 监听元数据缓存更新
     if (this.app.metadataCache && typeof this.app.metadataCache.on === 'function') {
       this.registerEvent(
-        this.app.metadataCache.on('changed', (file: any) => {
+        this.app.metadataCache.on('changed', (file: TFile) => {
           if (file?.path) {
             this.documentRevisions.set(file.path, (this.documentRevisions.get(file.path) || 0) + 1);
             this.chapterCache.deleteByPrefix(`${file.path}|`);
           }
           const activeView = this.app.workspace?.getActiveViewOfType ? this.app.workspace.getActiveViewOfType(MarkdownView) : null;
           if (activeView && activeView.file && activeView.file.path === file.path) {
-            this.attachStepperToView(activeView);
+            void this.attachStepperToView(activeView);
           }
         })
       );
@@ -894,11 +937,11 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-jump-prev',
       name: t('commandJumpPrev'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (view) {
           if (!checking) {
-            this.jumpToPreviousChapter(view);
+            void this.jumpToPreviousChapter(view);
           }
           return true;
         }
@@ -909,11 +952,11 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-jump-next',
       name: t('commandJumpNext'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (view) {
           if (!checking) {
-            this.jumpToNextChapter(view);
+            void this.jumpToNextChapter(view);
           }
           return true;
         }
@@ -924,11 +967,11 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-open-palette',
       name: t('commandOpenPalette'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (view) {
           if (!checking) {
-            this.openChapterPalette(view);
+            void this.openChapterPalette(view);
           }
           return true;
         }
@@ -939,11 +982,11 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-resume-last-chapter',
       name: t('commandResumeLastChapter'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || this.settings.readingBookmarksEnabled !== true) return false;
         if (!checking) {
-          this.resumeLastChapter(view);
+          void this.resumeLastChapter(view);
         }
         return true;
       }
@@ -952,11 +995,11 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-toggle-revisit-current',
       name: t('commandToggleRevisit'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || this.settings.readingBookmarksEnabled !== true) return false;
         if (!checking) {
-          this.toggleCurrentChapterMarker('revisit', view);
+          void this.toggleCurrentChapterMarker('revisit', view);
         }
         return true;
       }
@@ -965,11 +1008,11 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-toggle-important-current',
       name: t('commandToggleImportant'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || this.settings.readingBookmarksEnabled !== true) return false;
         if (!checking) {
-          this.toggleCurrentChapterMarker('important', view);
+          void this.toggleCurrentChapterMarker('important', view);
         }
         return true;
       }
@@ -978,11 +1021,11 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-clear-reading-bookmarks-current',
       name: t('commandClearReadingBookmarks'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || this.settings.readingBookmarksEnabled !== true) return false;
         if (!checking) {
-          this.clearReadingBookmarks(view);
+          void this.clearReadingBookmarks(view);
         }
         return true;
       }
@@ -991,7 +1034,7 @@ class ChapterPipelinePlugin extends Plugin {
     this.addCommand({
       id: 'chapter-pipeline-cleanup-reading-bookmarks',
       name: t('commandCleanupReadingBookmarks'),
-      checkCallback: (checking: any) => {
+      checkCallback: (checking: boolean) => {
         if (this.settings.readingBookmarksEnabled !== true) return false;
         if (!checking) {
           const count = this.cleanupOrphanedReadingState();
@@ -1009,7 +1052,8 @@ class ChapterPipelinePlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loadedData = (await this.loadData()) as Partial<PluginSettings> | null | undefined;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loadedData ?? {});
     if (this.settings.showExcerpt === undefined) {
       this.settings.showExcerpt = true;
     }
@@ -1080,7 +1124,7 @@ class ChapterPipelinePlugin extends Plugin {
     return cleanedCount;
   }
 
-  async pruneDeletedReadingState(deletedPath: any) {
+  async pruneDeletedReadingState(deletedPath: string): Promise<number> {
     if (!deletedPath || typeof deletedPath !== 'string') return 0;
     const readingState = this.ensureReadingState();
     if (!readingState?.files) return 0;
@@ -1103,11 +1147,11 @@ class ChapterPipelinePlugin extends Plugin {
     return removedCount;
   }
 
-  isReadingBookmarksEnabled() {
+  isReadingBookmarksEnabled(): boolean {
     return this.settings?.readingBookmarksEnabled === true;
   }
 
-  resolveActiveColor(activeColor: any) {
+  resolveActiveColor(activeColor?: string): string {
     const color = typeof activeColor === 'string' ? activeColor.trim() : '';
     if (!color) return '#3b82f6';
     if (color === 'custom') {
@@ -1119,11 +1163,11 @@ class ChapterPipelinePlugin extends Plugin {
     return color;
   }
 
-  resolveActiveForeground(activeColor: any) {
+  resolveActiveForeground(activeColor?: string): string {
     return resolveReadableForeground(this.resolveActiveColor(activeColor));
   }
 
-  getReadingFileState(fileOrPath: any, create: any = false) {
+  getReadingFileState(fileOrPath: TFile | { path?: string } | string | null | undefined, create: boolean = false): ReadingFileState | null {
     const path = typeof fileOrPath === 'string' ? fileOrPath : fileOrPath?.path;
     if (!path) return null;
 
@@ -1136,7 +1180,7 @@ class ChapterPipelinePlugin extends Plugin {
     return fileState || null;
   }
 
-  pruneReadingFileState(fileOrPath: any) {
+  pruneReadingFileState(fileOrPath: TFile | { path?: string } | string | null | undefined): void {
     const path = typeof fileOrPath === 'string' ? fileOrPath : fileOrPath?.path;
     if (!path) return;
     const readingState = this.ensureReadingState();
@@ -1146,23 +1190,23 @@ class ChapterPipelinePlugin extends Plugin {
     }
   }
 
-  getChapterMarkers(file: any, chapter: any) {
+  getChapterMarkers(file: TFile | { path?: string } | string | null | undefined, chapter: ChapterLike | null | undefined): ChapterMarker | null {
     if (!file || !chapter?.id) return null;
     return this.getReadingFileState(file, false)?.markers?.[chapter.id] || null;
   }
 
-  getChapterStatusLabels(file: any, chapter: any) {
+  getChapterStatusLabels(file: TFile | { path?: string } | string | null | undefined, chapter: ChapterLike | null | undefined): ChapterStatusLabel[] {
     if (!this.isReadingBookmarksEnabled()) return [];
     const markers = this.getChapterMarkers(file, chapter);
     if (!markers) return [];
 
-    const labels = [];
+    const labels: ChapterStatusLabel[] = [];
     if (markers.revisit) labels.push({ className: 'is-revisit', label: t('revisitLabel') });
     if (markers.important) labels.push({ className: 'is-important', label: t('importantLabel') });
     return labels;
   }
 
-  scheduleReadingStateSave() {
+  scheduleReadingStateSave(): void {
     if (this.readingSaveTimer !== null) {
       window.clearTimeout(this.readingSaveTimer);
     }
@@ -1172,18 +1216,18 @@ class ChapterPipelinePlugin extends Plugin {
     }, 350);
   }
 
-  isActiveMarkdownView(view: any) {
+  isActiveMarkdownView(view: unknown): boolean {
     if (!view || !this.app?.workspace?.getActiveViewOfType) return false;
     return this.app.workspace.getActiveViewOfType(MarkdownView) === view;
   }
 
-  isScrollEventRelevant(event: any, view: any, container: any) {
+  isScrollEventRelevant(event: Event, view: MarkdownView | (object & { containerEl?: HTMLElement }) | null | undefined, container: HTMLElement | null | undefined): boolean {
     if (!event || !event.target) return true;
-    const target = event.target;
+    const target = event.target as HTMLElement;
 
     // Check direct equality
     if (target === container) return true;
-    if (view?.containerEl && target === view.containerEl) return true;
+    if (view && 'containerEl' in view && target === view.containerEl) return true;
 
     // Check standard DOM contains
     if (container && typeof container.contains === 'function') {
@@ -1193,7 +1237,7 @@ class ChapterPipelinePlugin extends Plugin {
         /* ignore DOM exception */
       }
     }
-    if (view?.containerEl && typeof view.containerEl.contains === 'function') {
+    if (view && 'containerEl' in view && view.containerEl && typeof view.containerEl.contains === 'function') {
       try {
         if (view.containerEl.contains(target)) return true;
       } catch {
@@ -1202,9 +1246,9 @@ class ChapterPipelinePlugin extends Plugin {
     }
 
     // Tree walk fallback via parentElement
-    let curr = target.parentElement;
+    let curr: HTMLElement | null = target.parentElement;
     while (curr) {
-      if (curr === container || (view?.containerEl && curr === view.containerEl)) {
+      if (curr === container || (view && 'containerEl' in view && curr === view.containerEl)) {
         return true;
       }
       curr = curr.parentElement;
@@ -1212,15 +1256,15 @@ class ChapterPipelinePlugin extends Plugin {
 
     // Global target check: only active markdown view processes document/window scroll
     const isGlobalTarget = (
-      (typeof document !== 'undefined' && (target === document || target === document.documentElement || target === document.body)) ||
-      (typeof window !== 'undefined' && target === window)
+      (typeof document !== 'undefined' && (target as unknown === document || target === document.documentElement || target === document.body)) ||
+      (typeof window !== 'undefined' && (target as unknown) === window)
     );
     if (isGlobalTarget) {
       return this.isActiveMarkdownView(view);
     }
 
     // Check if target is an ancestor containing container
-    if (typeof target.contains === 'function') {
+    if (container && typeof target.contains === 'function') {
       try {
         if (target.contains(container)) return true;
       } catch {
@@ -1231,10 +1275,11 @@ class ChapterPipelinePlugin extends Plugin {
     return false;
   }
 
-  recordReadingPosition(view: any, chapter: any) {
-    if (!this.isReadingBookmarksEnabled() || !this.isActiveMarkdownView(view) || !view?.file || !chapter?.id) return false;
+  recordReadingPosition(view: MarkdownView | (object & { file?: TFile }) | null | undefined, chapter: ChapterLike | null | undefined): boolean {
+    if (!this.isReadingBookmarksEnabled() || !this.isActiveMarkdownView(view) || !(view as { file?: TFile })?.file || !chapter?.id) return false;
 
-    const fileState = this.getReadingFileState(view.file, true);
+    const file = (view as { file: TFile }).file;
+    const fileState = this.getReadingFileState(file, true);
     if (!fileState) return false;
     if (fileState.resume?.chapterId === chapter.id) return false;
 
@@ -1247,36 +1292,38 @@ class ChapterPipelinePlugin extends Plugin {
     return true;
   }
 
-  async getAllChaptersForView(view: any) {
-    const targetView = (view && view.file)
+  async getAllChaptersForView(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<ChapterNode[]> {
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!targetView?.file) return [];
+    if (!targetView || !(targetView as { file?: TFile }).file) return [];
 
-    const content = await this.app.vault.cachedRead(targetView.file);
-    return this.extractAllChapters(content, targetView.file);
+    const file = (targetView as { file: TFile }).file;
+    const content = await this.app.vault.cachedRead(file);
+    return this.extractAllChapters(content, file);
   }
 
-  async resumeLastChapter(view: any) {
+  async resumeLastChapter(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<boolean> {
     if (!this.isReadingBookmarksEnabled()) return false;
-    const targetView = (view && view.file)
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!targetView?.file) return false;
+    if (!targetView || !(targetView as { file?: TFile }).file) return false;
 
-    const savedResume = this.getReadingFileState(targetView.file, false)?.resume;
+    const file = (targetView as { file: TFile }).file;
+    const savedResume = this.getReadingFileState(file, false)?.resume;
     if (!savedResume?.chapterId) {
       this.showNotice(t('resumeUnavailable'));
       return false;
     }
 
     const chapters = await this.getAllChaptersForView(targetView);
-    const targetChapter = chapters.find((chapter: any) => chapter.id === savedResume.chapterId);
+    const targetChapter = chapters.find((chapter: ChapterNode) => chapter.id === savedResume.chapterId);
     if (!targetChapter) {
-      const fileState = this.getReadingFileState(targetView.file, false);
+      const fileState = this.getReadingFileState(file, false);
       if (fileState) {
         delete fileState.resume;
-        this.pruneReadingFileState(targetView.file);
+        this.pruneReadingFileState(file);
         await this.saveSettings();
       }
       this.showNotice(t('resumeNotFound'));
@@ -1291,20 +1338,21 @@ class ChapterPipelinePlugin extends Plugin {
     return true;
   }
 
-  async toggleChapterMarker(view: any, chapter: any, markerName: any) {
-    if (!this.isReadingBookmarksEnabled() || !view?.file || !chapter?.id || !['revisit', 'important'].includes(markerName)) return false;
+  async toggleChapterMarker(view: MarkdownView | (object & { file?: TFile }) | null | undefined, chapter: ChapterLike | null | undefined, markerName: BookmarkKind): Promise<boolean> {
+    const file = (view as { file?: TFile })?.file;
+    if (!this.isReadingBookmarksEnabled() || !file || !chapter?.id || !['revisit', 'important'].includes(markerName)) return false;
 
-    const fileState = this.getReadingFileState(view.file, true);
+    const fileState = this.getReadingFileState(file, true);
     if (!fileState) return false;
     const markers = fileState.markers || (fileState.markers = {});
-    const current: Record<string, any> = (markers as Record<string, any>)[chapter.id] || { revisit: false, important: false };
+    const current: ChapterMarker = markers[chapter.id] || { revisit: false, important: false };
     current[markerName] = !current[markerName];
 
     if (current.revisit || current.important) {
-      (markers as Record<string, any>)[chapter.id] = current;
+      markers[chapter.id] = current;
     } else {
-      delete (markers as Record<string, any>)[chapter.id];
-      this.pruneReadingFileState(view.file);
+      delete markers[chapter.id];
+      this.pruneReadingFileState(file);
     }
 
     await this.saveSettings();
@@ -1312,70 +1360,76 @@ class ChapterPipelinePlugin extends Plugin {
     return current[markerName];
   }
 
-  async toggleCurrentChapterMarker(markerName: any, view: any) {
+  async toggleCurrentChapterMarker(markerName: BookmarkKind, view?: MarkdownView | (object & { file?: TFile }) | null): Promise<boolean> {
     if (!this.isReadingBookmarksEnabled()) return false;
-    const targetView = (view && view.file)
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!targetView?.file) return false;
+    if (!targetView || !(targetView as { file?: TFile }).file) return false;
 
     const chapters = await this.getChaptersForView(targetView);
     const activeIndex = this.getActiveChapterIndex(targetView, chapters);
     return activeIndex >= 0 ? this.toggleChapterMarker(targetView, chapters[activeIndex], markerName) : false;
   }
 
-  async clearReadingBookmarks(view: any) {
-    const targetView = (view && view.file)
+  async clearReadingBookmarks(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<boolean> {
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!targetView?.file) return false;
+    if (!targetView || !(targetView as { file?: TFile }).file) return false;
 
+    const file = (targetView as { file: TFile }).file;
     const readingState = this.ensureReadingState();
-    delete readingState.files[targetView.file.path];
+    delete readingState.files[file.path];
     await this.saveSettings();
     this.updateAllMarkdownViews();
     this.showNotice(t('readingBookmarksCleared'));
     return true;
   }
 
-  showChapterContextMenu(event: any, view: any, chapter: any) {
+  /** Display context menu actions for a chapter bookmark. */
+  showChapterContextMenu(event: MouseEvent, view: MarkdownView | (object & { file?: TFile }) | null | undefined, chapter: ChapterLike | null | undefined): void {
     if (!this.isReadingBookmarksEnabled() || !chapter) return;
     if (event?.preventDefault) event.preventDefault();
     if (event?.stopPropagation) event.stopPropagation();
 
-    const markers = (this.getChapterMarkers(view?.file, chapter) || { revisit: false, important: false }) as ChapterMarker;
+    const file = (view as { file?: TFile })?.file;
+    const markers = this.getChapterMarkers(file, chapter) || { revisit: false, important: false };
     const menu = new Menu();
-    menu.addItem((item: any) => item
+    menu.addItem((item) => item
       .setTitle(markers.revisit ? t('removeRevisitMark') : t('markForRevisit'))
-      .onClick(() => this.toggleChapterMarker(view, chapter, 'revisit')));
-    menu.addItem((item: any) => item
+      .onClick(async () => { await this.toggleChapterMarker(view, chapter, 'revisit'); }));
+    menu.addItem((item) => item
       .setTitle(markers.important ? t('removeImportantMark') : t('markImportant'))
-      .onClick(() => this.toggleChapterMarker(view, chapter, 'important')));
+      .onClick(async () => { await this.toggleChapterMarker(view, chapter, 'important'); }));
     if (markers.revisit || markers.important) {
-      menu.addItem((item: any) => item
+      menu.addItem((item) => item
         .setTitle(t('clearChapterBookmarks'))
-        .onClick(() => this.clearChapterMarkers(view, chapter)));
+        .onClick(async () => { await this.clearChapterMarkers(view, chapter); }));
     }
     menu.showAtMouseEvent(event);
   }
 
-  async clearChapterMarkers(view: any, chapter: any) {
-    if (!view?.file || !chapter?.id) return false;
-    const fileState = this.getReadingFileState(view.file, false);
+  /** Remove all bookmark markers for a specific chapter in the file. */
+  async clearChapterMarkers(view: MarkdownView | (object & { file?: TFile }) | null | undefined, chapter: ChapterLike | null | undefined): Promise<boolean> {
+    const file = (view as { file?: TFile })?.file;
+    if (!file || !chapter?.id) return false;
+    const fileState = this.getReadingFileState(file, false);
     if (!fileState?.markers?.[chapter.id]) return false;
     delete fileState.markers[chapter.id];
-    this.pruneReadingFileState(view.file);
+    this.pruneReadingFileState(file);
     await this.saveSettings();
     this.updateAllMarkdownViews();
     return true;
   }
 
-  mergeReadingFileStates(destinationState: any, sourceState: any): ReadingFileState {
+  /** Merge reading file bookmarks between destination and source states. */
+  mergeReadingFileStates(destinationState: ReadingFileState | undefined, sourceState: ReadingFileState | undefined): ReadingFileState {
     const merged: ReadingFileState = { markers: {} };
     const states = [destinationState, sourceState].filter(Boolean);
     for (const state of states) {
-      for (const [chapterId, rawMarker] of Object.entries((state.markers || {}) as Record<string, any>)) {
-        const marker = rawMarker as Record<string, any>;
+      for (const [chapterId, rawMarker] of Object.entries(state?.markers || {})) {
+        const marker = rawMarker;
         const current = merged.markers[chapterId] || { revisit: false, important: false };
         current.revisit = current.revisit || marker.revisit === true;
         current.important = current.important || marker.important === true;
@@ -1392,7 +1446,7 @@ class ChapterPipelinePlugin extends Plugin {
     return merged;
   }
 
-  async migrateReadingState(oldPath: any, newPath: any) {
+  async migrateReadingState(oldPath: string, newPath: string): Promise<boolean> {
     if (!oldPath || !newPath || oldPath === newPath) return false;
     const readingState = this.ensureReadingState();
     const sourceState = readingState.files[oldPath];
@@ -1404,25 +1458,25 @@ class ChapterPipelinePlugin extends Plugin {
     return true;
   }
 
-  maybeShowResumeNotice(view: any, content: any, file: any) {
+  maybeShowResumeNotice(view: MarkdownView | (object & { file?: TFile }) | null | undefined, content: string, file: TFile): void {
     if (!this.isReadingBookmarksEnabled() || !this.isActiveMarkdownView(view) || !file?.path || this.resumePromptedPaths.has(file.path)) return;
     const savedResume = this.getReadingFileState(file, false)?.resume;
     if (!savedResume?.chapterId) return;
 
     this.resumePromptedPaths.add(file.path);
-    const chapter = this.extractAllChapters(content, file).find((item: any) => item.id === savedResume.chapterId);
+    const chapter = this.extractAllChapters(content, file).find((item: ChapterNode) => item.id === savedResume.chapterId);
     if (chapter) {
       this.showNotice(t('resumeAvailable', { title: chapter.title || savedResume.title }));
     }
   }
 
-  showNotice(message: any, timeout: any = 6000) {
+  showNotice(message: string, timeout: number = 6000): void {
     if (typeof Notice === 'function') {
       new Notice(message, timeout);
     }
   }
 
-  scheduleUpdateAllMarkdownViews() {
+  scheduleUpdateAllMarkdownViews(): void {
     this.updateAllMarkdownViews();
 
     if (this.refreshFrame !== null) {
@@ -1442,18 +1496,22 @@ class ChapterPipelinePlugin extends Plugin {
     }, 180);
   }
 
-  updateAllMarkdownViews() {
+  updateAllMarkdownViews(): void {
     const leaves = this.app.workspace.getLeavesOfType('markdown');
-    leaves.forEach((leaf: any) => {
+    leaves.forEach((leaf: WorkspaceLeaf) => {
       if (leaf.view instanceof MarkdownView) {
-        this.attachStepperToView(leaf.view);
+        void this.attachStepperToView(leaf.view);
       }
     });
   }
 
-  extractChapters(content: any, file: any, parserSettings: any = this.settings) {
+  extractChapters(
+    content: string,
+    file: TFile | { path?: string; stat?: { mtime?: number } } | null | undefined,
+    parserSettings: unknown = this.settings
+  ): ChapterNode[] {
     const fileCache = (file && typeof file.path === 'string' && this.app && this.app.metadataCache && typeof this.app.metadataCache.getFileCache === 'function')
-      ? this.app.metadataCache.getFileCache(file)
+      ? this.app.metadataCache.getFileCache(file as TFile)
       : null;
     let headings = fileCache ? fileCache.headings || [] : [];
 
@@ -1488,35 +1546,39 @@ class ChapterPipelinePlugin extends Plugin {
     const revision = this.documentRevisions.get(filePath) || 0;
     const mtime = Number(file?.stat?.mtime) || 0;
     const signatureIndexes = headings.length <= 64
-      ? headings.map((_heading: any, index: any) => index)
+      ? headings.map((_heading, index) => index)
       : [0, Math.floor(headings.length / 2), headings.length - 1];
     const headingSignature = signatureIndexes
-      .map((index: any) => {
+      .map((index) => {
         const heading = headings[index];
         return `${heading.level}:${heading.heading}:${heading.position?.start?.line}`;
       })
       .join('\u0001');
+    const settingsObj = parserSettings as PluginSettings;
     const cacheKey = [
       filePath,
       mtime,
       revision,
-      parserSettings?.minHeadingLevel,
-      parserSettings?.maxHeadingLevel,
-      parserSettings?.ignoreFirstH1,
-      parserSettings?.showExcerpt,
-      parserSettings?.excerptLength,
+      settingsObj?.minHeadingLevel,
+      settingsObj?.maxHeadingLevel,
+      settingsObj?.ignoreFirstH1,
+      settingsObj?.showExcerpt,
+      settingsObj?.excerptLength,
       headings.length,
       headingSignature,
       content?.length || 0
     ].join('|');
     const cached = this.chapterCache?.get(cacheKey);
     if (cached) return cached;
-    const parsed = ChapterParser.parse(content, headings, parserSettings);
+    const parsed = ChapterParser.parse(content, headings, parserSettings as Partial<PluginSettings>);
     this.chapterCache?.set(cacheKey, parsed);
     return parsed;
   }
 
-  extractAllChapters(content: any, file: any) {
+  extractAllChapters(
+    content: string,
+    file: TFile | { path?: string; stat?: { mtime?: number } } | null | undefined
+  ): ChapterNode[] {
     const allHeadingSettings = Object.assign({}, this.settings, {
       minHeadingLevel: 1,
       maxHeadingLevel: 6,
@@ -1525,20 +1587,20 @@ class ChapterPipelinePlugin extends Plugin {
     return this.extractChapters(content, file, allHeadingSettings);
   }
 
-  async getChaptersForView(view: any) {
-    const targetView = (view && view.file)
+  async getChaptersForView(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<ChapterNode[]> {
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!targetView || !targetView.file) return [];
+    if (!targetView || !(targetView as { file?: TFile }).file) return [];
 
-    const file = targetView.file;
+    const file = (targetView as { file: TFile }).file;
     const content = await this.app.vault.cachedRead(file);
     return this.extractChapters(content, file);
   }
 
-  getActiveChapterIndex(view: any, chapters: any) {
+  getActiveChapterIndex(view: MarkdownView | (object & { contentEl?: HTMLElement }) | null, chapters: ChapterNode[]): number {
     if (!chapters || chapters.length === 0) return -1;
-    const container = view?.contentEl;
+    const container = (view as { contentEl?: HTMLElement })?.contentEl;
     const currentLine = this.getCurrentEditorTopLine(view, container, chapters);
     let activeIdx = 0;
     for (let i = 0; i < chapters.length; i++) {
@@ -1551,8 +1613,8 @@ class ChapterPipelinePlugin extends Plugin {
     return activeIdx;
   }
 
-  async jumpToPreviousChapter(view: any) {
-    const targetView = (view && view.file)
+  async jumpToPreviousChapter(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<void> {
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!targetView) return;
@@ -1572,8 +1634,8 @@ class ChapterPipelinePlugin extends Plugin {
     }
   }
 
-  async jumpToNextChapter(view: any) {
-    const targetView = (view && view.file)
+  async jumpToNextChapter(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<void> {
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!targetView) return;
@@ -1593,8 +1655,8 @@ class ChapterPipelinePlugin extends Plugin {
     }
   }
 
-  async openChapterPalette(view: any) {
-    const targetView = (view && view.file)
+  async openChapterPalette(view?: MarkdownView | (object & { file?: TFile }) | null): Promise<ChapterSuggestModal | null> {
+    const targetView = (view && (view as { file?: TFile }).file)
       ? view
       : this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!targetView) return null;
@@ -1607,10 +1669,10 @@ class ChapterPipelinePlugin extends Plugin {
     return modal;
   }
 
-  async attachStepperToView(view: any) {
-    if (!view || !view.file) return;
+  async attachStepperToView(view: MarkdownView | (object & { file?: TFile; contentEl?: HTMLElement })): Promise<LegacyRenderResult | undefined> {
+    if (!view || !(view as { file?: TFile }).file) return;
 
-    const container = view.contentEl;
+    const container = (view as { contentEl?: HTMLElement }).contentEl;
     if (!container) return;
 
     const renderVersion = (this.renderVersions.get(view) || 0) + 1;
@@ -1628,7 +1690,7 @@ class ChapterPipelinePlugin extends Plugin {
     }
 
     if (this.observers.has(container)) {
-      this.observers.get(container).disconnect();
+      (this.observers.get(container) as ResizeObserver | MutationObserver).disconnect();
       this.observers.delete(container);
     }
 
@@ -1636,12 +1698,12 @@ class ChapterPipelinePlugin extends Plugin {
       const binding = this.scrollBindings.get(container);
       const boundScrollers = binding?.scrollers || (binding?.scroller ? [binding.scroller] : []);
       if (binding?.handler) {
-        boundScrollers.forEach((scroller: any) => scroller?.removeEventListener?.('scroll', binding.handler, true));
+        boundScrollers.forEach((scroller: HTMLElement) => scroller?.removeEventListener?.('scroll', binding.handler, true));
       }
       this.scrollBindings.delete(container);
     }
 
-    const file = view.file;
+    const file = (view as { file: TFile }).file;
     const content = await this.app.vault.cachedRead(file);
     if (this.renderVersions.get(view) !== renderVersion) {
       return;
@@ -1669,8 +1731,8 @@ class ChapterPipelinePlugin extends Plugin {
     const track = stepperContainer.createDiv({ cls: 'codex-stepper-track' });
     track.classList.add(`hierarchy-mode-${hierarchyMode}`);
 
-    let railEl = null;
-    let railIndicator = null;
+    let railEl: HTMLElement | null = null;
+    let railIndicator: HTMLElement | null = null;
     if (this.settings.showProgressRail === true) {
       railEl = track.createDiv({ cls: 'codex-progress-rail' });
       railIndicator = railEl.createDiv({ cls: 'codex-progress-indicator' });
@@ -1681,7 +1743,7 @@ class ChapterPipelinePlugin extends Plugin {
     // 2. 创建悬浮章节名独立气泡浮层（挂载到当前容器所在文档的 body，多窗口/多分屏完美隔离）
     const doc = container.ownerDocument || (typeof document !== 'undefined' ? document : null);
     const targetBody = doc ? (doc.body || doc) : (typeof document !== 'undefined' ? document.body : null);
-    const floatingTooltip = (targetBody && typeof targetBody.createDiv === 'function')
+    const floatingTooltip: HTMLElement | null = (targetBody && typeof targetBody.createDiv === 'function')
       ? targetBody.createDiv({ cls: 'codex-floating-tooltip' })
       : ((doc && typeof doc.createElement === 'function')
         ? (() => {
@@ -1694,7 +1756,7 @@ class ChapterPipelinePlugin extends Plugin {
           })()
         : (typeof document !== 'undefined' && document.body?.createDiv ? document.body.createDiv({ cls: 'codex-floating-tooltip' }) : null));
 
-    let tooltipId = null;
+    let tooltipId: string | null = null;
     if (floatingTooltip) {
       this.viewTooltips.set(view, floatingTooltip);
       tooltipId = `codex-tooltip-${++this.tooltipCounter}`;
@@ -1797,7 +1859,7 @@ class ChapterPipelinePlugin extends Plugin {
 
     updateGutterDimensions();
 
-    let resizeRaf: any = null;
+    let resizeRaf: number | null = null;
     const resizeObserver = new ResizeObserver(() => {
       if (resizeRaf) return;
       resizeRaf = this.scheduleFrame(() => {
@@ -1808,11 +1870,11 @@ class ChapterPipelinePlugin extends Plugin {
     resizeObserver.observe(container);
     this.observers.set(container, resizeObserver);
 
-    const dashElements: any[] = [];
+    const dashElements: HTMLElement[] = [];
     let isClickScrolling = false;
-    let clickTimeout: any = null;
+    let clickTimeout: number | null = null;
 
-    const measureRailIndicator = (idx: any) => {
+    const measureRailIndicator = (idx: number): string | null => {
       if (!railIndicator) return null;
       const total = chapters.length;
       if (total <= 1) {
@@ -1827,11 +1889,11 @@ class ChapterPipelinePlugin extends Plugin {
       return `${pct}%`;
     };
 
-    const applyRailIndicator = (height: any) => {
+    const applyRailIndicator = (height: string | null): void => {
       if (railIndicator && height) railIndicator.style.height = height;
     };
 
-    chapters.forEach((chap: any, i: any) => {
+    chapters.forEach((chap: ChapterNode, i: number) => {
       const dashItem = track.createDiv({
         cls: `codex-dash-item level-${Math.min(chap.level, 6)}`,
         attr: {
@@ -1846,10 +1908,10 @@ class ChapterPipelinePlugin extends Plugin {
       const bookmarkStatuses = this.getChapterStatusLabels(file, chap);
       if (bookmarkStatuses.length > 0) {
         dashItem.classList.add('has-bookmarks');
-        const statusText = bookmarkStatuses.map((status: any) => status.label).join(', ');
+        const statusText = bookmarkStatuses.map((status: ChapterStatusLabel) => status.label).join(', ');
         dashItem.setAttribute('aria-label', t('chapterStatus', { title: chap.title, statuses: statusText }));
         const markerEl = dashItem.createSpan({ cls: 'codex-bookmark-markers', attr: { 'aria-hidden': 'true' } });
-        bookmarkStatuses.forEach((status: any) => {
+        bookmarkStatuses.forEach((status: ChapterStatusLabel) => {
           markerEl.createSpan({ cls: `codex-bookmark-marker ${status.className}` });
         });
       } else {
@@ -1872,18 +1934,18 @@ class ChapterPipelinePlugin extends Plugin {
           text: `H${chap.level}`
         });
         const titleEl = headerEl.createDiv({ cls: 'codex-tooltip-title' });
-        void MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', view);
+        void MarkdownRenderer.render(this.app, formatTitleForRender(chap.title), titleEl, '', this);
 
         // 正文 3 行纯文本摘要（支持 KaTeX 公式渲染，彻底过滤 Callout 容器）
         if (this.settings.showExcerpt !== false && chap.summaryMarkdown) {
           const excerptEl = floatingTooltip.createDiv({ cls: 'codex-tooltip-excerpt' });
-          void MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', view);
+          void MarkdownRenderer.render(this.app, chap.summaryMarkdown, excerptEl, '', this);
         }
 
         const statuses = this.getChapterStatusLabels(file, chap);
         if (statuses.length > 0) {
           const statusEl = floatingTooltip.createDiv({ cls: 'codex-tooltip-bookmark-status' });
-          statuses.forEach((status: any) => {
+          statuses.forEach((status: ChapterStatusLabel) => {
             statusEl.createSpan({ cls: `codex-bookmark-label ${status.className}`, text: status.label });
           });
         }
@@ -1901,7 +1963,7 @@ class ChapterPipelinePlugin extends Plugin {
         const winWidth = (targetWindow && targetWindow.innerWidth) ? targetWindow.innerWidth : 1200;
         const winHeight = (targetWindow && targetWindow.innerHeight) ? targetWindow.innerHeight : 800;
 
-        let leftX;
+        let leftX: number;
         if (isRightDock) {
           floatingTooltip.classList.add('dock-right');
           leftX = Math.max(10, itemRect.left - tooltipWidth - 12);
@@ -1912,7 +1974,7 @@ class ChapterPipelinePlugin extends Plugin {
 
         const minCenterY = tooltipHeight / 2 + 12;
         const maxCenterY = winHeight - tooltipHeight / 2 - 12;
-        let clampedY;
+        let clampedY: number;
         if (minCenterY > maxCenterY) {
           clampedY = winHeight / 2;
         } else {
@@ -1944,7 +2006,7 @@ class ChapterPipelinePlugin extends Plugin {
       dashItem.addEventListener('mouseleave', hideTooltip);
       dashItem.addEventListener('focus', showTooltip);
       dashItem.addEventListener('blur', hideTooltip);
-      dashItem.addEventListener('pointerdown', (event: any) => {
+      dashItem.addEventListener('pointerdown', (event: PointerEvent) => {
         if (event?.pointerType === 'touch') showTooltip();
       }, { passive: true });
       dashItem.addEventListener('touchstart', showTooltip, { passive: true });
@@ -1955,7 +2017,7 @@ class ChapterPipelinePlugin extends Plugin {
         if (clickTimeout) window.clearTimeout(clickTimeout);
 
         const railHeight = measureRailIndicator(i);
-        dashElements.forEach((d: any) => d.classList.remove('active'));
+        dashElements.forEach((d: HTMLElement) => d.classList.remove('active'));
         dashItem.classList.add('active');
         updateHierarchyFolding(chapters, dashElements, i, this.settings.hierarchyMode);
         applyRailIndicator(railHeight);
@@ -1975,14 +2037,14 @@ class ChapterPipelinePlugin extends Plugin {
       };
 
       // 点击横线：拟物微动音效 + 纯净置顶平滑跳转
-      dashItem.addEventListener('click', (e: any) => {
+      dashItem.addEventListener('click', (e: MouseEvent) => {
         if (e?.stopPropagation) e.stopPropagation();
         navigateToChapter();
       });
 
       dashItem.setAttribute('role', 'button');
       dashItem.setAttribute('tabindex', '0');
-      dashItem.addEventListener('keydown', (e: any) => {
+      dashItem.addEventListener('keydown', (e: KeyboardEvent) => {
         if (e?.key === 'Escape') {
           hideTooltip();
           return;
@@ -1992,7 +2054,7 @@ class ChapterPipelinePlugin extends Plugin {
         navigateToChapter();
       });
 
-      dashItem.addEventListener('contextmenu', (e: any) => {
+      dashItem.addEventListener('contextmenu', (e: MouseEvent) => {
         this.showChapterContextMenu(e, view, chap);
       });
 
@@ -2000,9 +2062,9 @@ class ChapterPipelinePlugin extends Plugin {
     });
 
     // 4. 基于真实行号与 120 FPS rAF 硬件加速节流
-    let rAF: any = null;
+    let rAF: number | null = null;
     let previousActiveIdx = -1;
-    let lastScrollTop: any = null;
+    let lastScrollTop: number | null = null;
     const scrollThreshold = 2;
     const updateActiveByRealLine = () => {
       if (isClickScrolling) return;
@@ -2030,7 +2092,7 @@ class ChapterPipelinePlugin extends Plugin {
       }
 
       const railHeight = measureRailIndicator(activeIdx);
-      dashElements.forEach((el: any, i: any) => {
+      dashElements.forEach((el: HTMLElement, i: number) => {
         if (i === activeIdx) {
           el.classList.add('active');
         } else {
@@ -2042,7 +2104,7 @@ class ChapterPipelinePlugin extends Plugin {
       applyRailIndicator(railHeight);
     };
 
-    const throttledScroll = (event: any) => {
+    const throttledScroll = (event: Event) => {
       if (!this.isScrollEventRelevant(event, view, container)) {
         return;
       }
@@ -2051,7 +2113,7 @@ class ChapterPipelinePlugin extends Plugin {
         && !this.isActiveMarkdownView(view)) {
         return;
       }
-      const eventScrollTop = Number(event?.target?.scrollTop);
+      const eventScrollTop = Number((event?.target as HTMLElement)?.scrollTop);
       if (Number.isFinite(eventScrollTop)) {
         if (lastScrollTop !== null && Math.abs(eventScrollTop - lastScrollTop) < scrollThreshold) return;
         lastScrollTop = eventScrollTop;
@@ -2075,12 +2137,12 @@ class ChapterPipelinePlugin extends Plugin {
       // `scroll` does not bubble. Capture it from every known view ancestor so
       // active tracking still updates when a theme or Obsidian version moves
       // the actual scroll owner inside that chain.
-      scrollers.forEach((scroller: any) => scroller.addEventListener('scroll', throttledScroll, { passive: true, capture: true }));
+      scrollers.forEach((scroller: HTMLElement) => scroller.addEventListener('scroll', throttledScroll, { passive: true, capture: true }));
       this.scrollBindings.set(container, { scrollers, handler: throttledScroll });
     }
 
     const trackingContainer = scrollers[0] || this.getViewScroller(container, view) || null;
-    const mode = this.isReadingMode(view, container) ? 'reading' : 'live-preview';
+    const mode: 'reading' | 'live-preview' = this.isReadingMode(view, container) ? 'reading' : 'live-preview';
 
     // Explicit compatibility contract for the typed production session. Keep
     // legacy rendering internals private instead of making typed code recover
@@ -2094,14 +2156,14 @@ class ChapterPipelinePlugin extends Plugin {
       railIndicator,
       trackingContainer,
       releaseLegacyScrollTracking: () => {
-        scrollers.forEach((scroller: any) => scroller?.removeEventListener?.('scroll', throttledScroll, true));
+        scrollers.forEach((scroller: HTMLElement) => scroller?.removeEventListener?.('scroll', throttledScroll, true));
         const currentBinding = this.scrollBindings.get(container);
         if (currentBinding?.handler === throttledScroll) this.scrollBindings.delete(container);
       },
       isCurrentMount: () => {
-        if (view?.contentEl !== container) return false;
+        if ((view as { contentEl?: HTMLElement })?.contentEl !== container) return false;
         if (container.querySelector('.codex-stepper-container') !== stepperContainer) return false;
-        const currentMode = this.isReadingMode(view, container) ? 'reading' : 'live-preview';
+        const currentMode: 'reading' | 'live-preview' = this.isReadingMode(view, container) ? 'reading' : 'live-preview';
         if (currentMode !== mode) return false;
         const currentTrackingContainer = currentMode === 'reading'
           ? this.getViewScroller(container, view) || container.querySelector('.markdown-preview-view')
@@ -2112,8 +2174,9 @@ class ChapterPipelinePlugin extends Plugin {
     };
   }
 
-  isReadingMode(view: any, container: any = null) {
-    const mode = view?.getMode ? view.getMode() : view?.currentMode?.type;
+  isReadingMode(view: unknown, container: HTMLElement | null = null): boolean {
+    const targetView = view as { getMode?: () => string; currentMode?: { type?: string } } | null;
+    const mode = targetView?.getMode ? targetView.getMode() : targetView?.currentMode?.type;
     if (mode === 'preview' || mode === 'reading' || mode === 'read') return true;
     if (mode) return false;
     // Keep working across Obsidian releases that rename the public mode while
@@ -2121,12 +2184,12 @@ class ChapterPipelinePlugin extends Plugin {
     return Boolean(container?.querySelector?.('.markdown-preview-view')) && !container?.querySelector?.('.cm-editor');
   }
 
-  getViewScrollers(container: any, view: any = null) {
+  getViewScrollers(container: HTMLElement | null, view: unknown = null): HTMLElement[] {
     if (!container) return [];
-    const scrollers: any[] = [];
-    const addScroller = (element: any) => {
-      if (element && typeof element.addEventListener === 'function' && !scrollers.includes(element)) {
-        scrollers.push(element);
+    const scrollers: HTMLElement[] = [];
+    const addScroller = (element: Element | Document | null | undefined) => {
+      if (element && typeof element.addEventListener === 'function' && !scrollers.includes(element as HTMLElement)) {
+        scrollers.push(element as HTMLElement);
       }
     };
 
@@ -2159,23 +2222,23 @@ class ChapterPipelinePlugin extends Plugin {
     return scrollers;
   }
 
-  getViewScroller(container: any, view: any = null) {
+  getViewScroller(container: HTMLElement | null, view: unknown = null): HTMLElement | null {
     const scrollers = this.getViewScrollers(container, view);
     if (scrollers.length === 0) return null;
-    const activeScroller = scrollers.find((scroller: any) => (Number(scroller.scrollTop) || 0) > 0);
+    const activeScroller = scrollers.find((scroller: HTMLElement) => (Number(scroller.scrollTop) || 0) > 0);
     if (activeScroller) return activeScroller;
-    return scrollers.find((scroller: any) => {
+    return scrollers.find((scroller: HTMLElement) => {
       const scrollHeight = Number(scroller.scrollHeight) || 0;
       const clientHeight = Number(scroller.clientHeight) || 0;
       return scrollHeight > clientHeight + 1;
     }) || scrollers[0];
   }
 
-  clearFlashHighlights(container: any) {
+  clearFlashHighlights(container: HTMLElement | null | undefined): void {
     if (!container || typeof container.querySelectorAll !== 'function') return;
     const flashEls = container.querySelectorAll('.is-flashing, .flashing, .is-highlighted, .highlighted, .mod-highlighted');
     for (let i = 0; i < flashEls.length; i++) {
-      const el = flashEls[i];
+      const el = flashEls[i] as HTMLElement;
       if (!el || !el.classList) continue;
       // Protect user <mark> and .cm-highlight elements (and any elements inside them)
       const isMark = (el.tagName && el.tagName.toLowerCase() === 'mark') || el.classList.contains('cm-highlight');
@@ -2187,7 +2250,7 @@ class ChapterPipelinePlugin extends Plugin {
     }
   }
 
-  observeViewContainer(view: any, container: any) {
+  observeViewContainer(view: object, container: HTMLElement): void {
     if (this.viewObservers.has(container) || typeof MutationObserver === 'undefined') return;
 
     let refreshQueued = false;
@@ -2207,7 +2270,7 @@ class ChapterPipelinePlugin extends Plugin {
       this.scheduleFrame(() => {
         refreshQueued = false;
         if (!container.querySelector('.codex-stepper-container')) {
-          this.attachStepperToView(view);
+          void this.attachStepperToView(view);
         }
       });
     });
@@ -2216,13 +2279,13 @@ class ChapterPipelinePlugin extends Plugin {
     this.viewObservers.set(container, observer);
   }
 
-  getReadingHeading(view: any, chap: any) {
+  getReadingHeading(view: MarkdownView | (object & { contentEl?: HTMLElement }) | null | undefined, chap: ChapterLike | null | undefined): Element | null {
     if (!view || !chap) return null;
     const scroller = view.contentEl?.querySelector('.markdown-preview-view');
     if (!scroller) return null;
 
     const renderedHeadings = Array.from(scroller.querySelectorAll('h1, h2, h3, h4, h5, h6'))
-      .filter((el: any) => {
+      .filter((el: Element) => {
         if (el.classList && el.classList.contains('inline-title')) return false;
         if (typeof el.closest === 'function') {
           return !el.closest('.internal-embed, .markdown-embed, .markdown-embed-content, .popover, .codex-floating-tooltip, .mod-header');
@@ -2231,45 +2294,45 @@ class ChapterPipelinePlugin extends Plugin {
       });
 
     const targetTag = chap.level ? `H${chap.level}`.toUpperCase() : null;
-    const cleanNorm = normalizeHeadingText(chap.title);
-    const rawNorm = normalizeHeadingText(chap.rawHeading || chap.title);
+    const cleanNorm = normalizeHeadingText(chap.title || '');
+    const rawNorm = normalizeHeadingText(chap.rawHeading || chap.title || '');
 
     // 1. 优先：通过包含目标行号的 section 精确匹配
     if (chap.line !== undefined) {
       const section = scroller.querySelector(`.markdown-preview-section[data-line="${chap.line}"]`);
       if (section) {
         const headingsInSection = Array.from(section.querySelectorAll('h1, h2, h3, h4, h5, h6'))
-          .filter((h: any) => !h.classList.contains('inline-title') && !h.closest('.internal-embed, .markdown-embed'));
+          .filter((h: Element) => !h.classList.contains('inline-title') && !h.closest('.internal-embed, .markdown-embed'));
         if (headingsInSection.length > 0) {
-          const exact = headingsInSection.find((h: any) => {
+          const exact = headingsInSection.find((h: Element) => {
             const tagMatch = !targetTag || h.tagName.toUpperCase() === targetTag;
-            const dataNorm = normalizeHeadingText(h.getAttribute('data-heading'));
-            const textNorm = normalizeHeadingText(h.textContent);
+            const dataNorm = normalizeHeadingText(h.getAttribute('data-heading') || '');
+            const textNorm = normalizeHeadingText(h.textContent || '');
             return tagMatch && ((dataNorm && (dataNorm === cleanNorm || dataNorm === rawNorm)) ||
                                 (textNorm && (textNorm === cleanNorm || textNorm === rawNorm)));
           });
           if (exact) return exact;
-          const tagOnly = targetTag ? headingsInSection.find((h: any) => h.tagName.toUpperCase() === targetTag) : null;
+          const tagOnly = targetTag ? headingsInSection.find((h: Element) => h.tagName.toUpperCase() === targetTag) : null;
           if (tagOnly) return tagOnly;
           return headingsInSection[0];
         }
         return section;
       }
 
-      const byLine = renderedHeadings.find((heading: any) => {
+      const byLine = renderedHeadings.find((heading: Element) => {
         const lineAttr = heading.getAttribute('data-line') || heading.getAttribute('data-heading-line') || (typeof heading.closest === 'function' ? heading.closest('[data-line]')?.getAttribute('data-line') : null);
-        return lineAttr !== null && parseInt(lineAttr, 10) === chap.line;
+        return lineAttr !== null && lineAttr !== undefined && parseInt(lineAttr, 10) === chap.line;
       });
       if (byLine) return byLine;
     }
 
     // 2. 层级严格匹配 (H2/H3/...) + 归一化文本完全对齐
     if (targetTag && (cleanNorm || rawNorm)) {
-      const matchExact = renderedHeadings.find((h: any) => {
+      const matchExact = renderedHeadings.find((h: Element) => {
         const tag = (h.tagName || '').toUpperCase();
         if (tag !== targetTag) return false;
-        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading'));
-        const textNorm = normalizeHeadingText(h.textContent);
+        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading') || '');
+        const textNorm = normalizeHeadingText(h.textContent || '');
         return (dataNorm && (dataNorm === cleanNorm || dataNorm === rawNorm)) ||
                (textNorm && (textNorm === cleanNorm || textNorm === rawNorm));
       });
@@ -2278,11 +2341,11 @@ class ChapterPipelinePlugin extends Plugin {
 
     // 3. 层级严格匹配 + 子串包含对齐
     if (targetTag && cleanNorm) {
-      const matchPartial = renderedHeadings.find((h: any) => {
+      const matchPartial = renderedHeadings.find((h: Element) => {
         const tag = (h.tagName || '').toUpperCase();
         if (tag !== targetTag) return false;
-        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading'));
-        const textNorm = normalizeHeadingText(h.textContent);
+        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading') || '');
+        const textNorm = normalizeHeadingText(h.textContent || '');
         const matchData = Boolean(dataNorm) && (dataNorm.includes(cleanNorm) || cleanNorm.includes(dataNorm));
         const matchText = Boolean(textNorm) && (textNorm.includes(cleanNorm) || cleanNorm.includes(textNorm));
         return matchData || matchText;
@@ -2292,9 +2355,9 @@ class ChapterPipelinePlugin extends Plugin {
 
     // 4. 不限层级的归一化文本完全匹配
     if (cleanNorm || rawNorm) {
-      const byExactText = renderedHeadings.find((h: any) => {
-        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading'));
-        const textNorm = normalizeHeadingText(h.textContent);
+      const byExactText = renderedHeadings.find((h: Element) => {
+        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading') || '');
+        const textNorm = normalizeHeadingText(h.textContent || '');
         return (dataNorm && (dataNorm === cleanNorm || dataNorm === rawNorm)) ||
                (textNorm && (textNorm === cleanNorm || textNorm === rawNorm));
       });
@@ -2303,9 +2366,9 @@ class ChapterPipelinePlugin extends Plugin {
 
     // 5. 不限层级的子串包含匹配
     if (cleanNorm) {
-      const byPartialText = renderedHeadings.find((h: any) => {
-        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading'));
-        const textNorm = normalizeHeadingText(h.textContent);
+      const byPartialText = renderedHeadings.find((h: Element) => {
+        const dataNorm = normalizeHeadingText(h.getAttribute('data-heading') || '');
+        const textNorm = normalizeHeadingText(h.textContent || '');
         return (Boolean(dataNorm) && (dataNorm.includes(cleanNorm) || cleanNorm.includes(dataNorm))) ||
                (Boolean(textNorm) && (textNorm.includes(cleanNorm) || cleanNorm.includes(textNorm)));
       });
@@ -2313,16 +2376,16 @@ class ChapterPipelinePlugin extends Plugin {
     }
 
     // 6. 保底：headingIndex 匹配
-    if (Number.isInteger(chap.headingIndex) && renderedHeadings[chap.headingIndex]) {
+    if (typeof chap.headingIndex === 'number' && Number.isInteger(chap.headingIndex) && renderedHeadings[chap.headingIndex]) {
       return renderedHeadings[chap.headingIndex];
     }
 
     return null;
   }
 
-  getReadingSectionLineAtBaseline(view: any, container: any, chapters: any = []) {
-    const previewRoot = view?.contentEl?.querySelector('.markdown-preview-view');
-    const scroller = this.getViewScroller(container, view) || previewRoot;
+  getReadingSectionLineAtBaseline(view: unknown, container: HTMLElement | null | undefined, chapters: ChapterNode[] = []): number | null {
+    const previewRoot = (view as { contentEl?: HTMLElement })?.contentEl?.querySelector('.markdown-preview-view');
+    const scroller = this.getViewScroller(container || null, view) || previewRoot;
     const domDocument = typeof document !== 'undefined' ? document : null;
     if (!previewRoot || !scroller || !domDocument || typeof domDocument.elementsFromPoint !== 'function') return null;
 
@@ -2333,20 +2396,21 @@ class ChapterPipelinePlugin extends Plugin {
     if (!Number.isFinite(left) || !Number.isFinite(right) || right <= left) return null;
 
     const y = viewportRect.top + 70;
-    const xPositions = [0.2, 0.5, 0.8].map((ratio: any) => left + ((right - left) * ratio));
-    const isInsidePreview = (element: any) => {
-      let current = element;
+    const xPositions = [0.2, 0.5, 0.8].map((ratio: number) => left + ((right - left) * ratio));
+    const isInsidePreview = (element: Element | null) => {
+      let current: Element | null = element;
       while (current) {
         if (current === previewRoot) return true;
         current = current.parentElement;
       }
       return false;
     };
-    const findSection = (element: any) => {
-      let current = element;
+    const findSection = (element: Element | null) => {
+      let current: Element | null = element;
       while (current && current !== previewRoot) {
         const isPreviewSection = current.classList?.contains?.('markdown-preview-section');
-        const line = isPreviewSection ? parseInt(current.getAttribute?.('data-line'), 10) : NaN;
+        const dataLine = current.getAttribute?.('data-line');
+        const line = isPreviewSection && dataLine ? parseInt(dataLine, 10) : NaN;
         if (Number.isInteger(line)) return line;
         current = current.parentElement;
       }
@@ -2360,7 +2424,7 @@ class ChapterPipelinePlugin extends Plugin {
         const sectionLine = findSection(element);
         if (!Number.isInteger(sectionLine)) continue;
 
-        let chapterLine = null;
+        let chapterLine: number | null = null;
         for (const chapter of chapters) {
           if (chapter.line <= (sectionLine as number)) chapterLine = chapter.line;
           else break;
@@ -2372,23 +2436,23 @@ class ChapterPipelinePlugin extends Plugin {
     return null;
   }
 
-  getVisibleReadingHeadingLine(view: any, container: any, chapters: any = []) {
-    const previewRoot = view?.contentEl?.querySelector('.markdown-preview-view');
-    const scroller = this.getViewScroller(container, view) || previewRoot;
+  getVisibleReadingHeadingLine(view: unknown, container: HTMLElement | null | undefined, chapters: ChapterNode[] = []): number | null {
+    const previewRoot = (view as { contentEl?: HTMLElement })?.contentEl?.querySelector('.markdown-preview-view');
+    const scroller = this.getViewScroller(container || null, view) || previewRoot;
     if (!previewRoot || !scroller || !chapters.length) return null;
 
     const scrollerRect = scroller.getBoundingClientRect?.();
     if (!scrollerRect || !Number.isFinite(scrollerRect.top)) return null;
     const activeBaseline = scrollerRect.top + 70;
-    const seenHeadings = new Set();
-    let visibleLine = null;
+    const seenHeadings = new Set<Element>();
+    let visibleLine: number | null = null;
 
     // A markdown-preview-section's data-line is only its rendered chunk's
     // start line. Long notes can keep that value at 0 even after scrolling
     // far into the note. Real heading geometry is authoritative whenever the
     // heading is mounted, so use it before the chunk-line fallback.
     for (const chapter of chapters) {
-      const heading = this.getReadingHeading(view, chapter);
+      const heading = this.getReadingHeading(view as MarkdownView, chapter);
       if (!heading || seenHeadings.has(heading)) continue;
       seenHeadings.add(heading);
 
@@ -2402,21 +2466,47 @@ class ChapterPipelinePlugin extends Plugin {
     return visibleLine;
   }
 
-  getCurrentEditorTopLine(view: any, container: any, chapters: any = []) {
+  getCurrentEditorTopLine(view: unknown, container?: HTMLElement, chapters: ChapterNode[] = []): number {
     try {
       if (!this.isReadingMode(view, container)) {
         const visualHeadingLine = this.getLivePreviewHeadingLine(container, chapters);
         if (visualHeadingLine !== null) return visualHeadingLine;
 
+        const targetView = view as {
+          editor?: {
+            cm?: {
+              lineBlockAtHeight?: (height: number) => { from: number };
+              state?: { doc?: { lineAt: (pos: number) => { number: number } } };
+              scrollDOM?: HTMLElement;
+            };
+            getCursor?: (type: string) => { line: number };
+          };
+          editMode?: {
+            editor?: {
+              cm?: {
+                lineBlockAtHeight?: (height: number) => { from: number };
+                state?: { doc?: { lineAt: (pos: number) => { number: number } } };
+                scrollDOM?: HTMLElement;
+              };
+              getCursor?: (type: string) => { line: number };
+            };
+            cm?: {
+              lineBlockAtHeight?: (height: number) => { from: number };
+              state?: { doc?: { lineAt: (pos: number) => { number: number } } };
+              scrollDOM?: HTMLElement;
+            };
+          };
+        } | null;
+
         const cmCandidates = [
-          view.editor?.cm,
-          view.editMode?.editor?.cm,
-          view.editMode?.cm,
-          view.editor
+          targetView?.editor?.cm,
+          targetView?.editMode?.editor?.cm,
+          targetView?.editMode?.cm
         ].filter(Boolean);
+
         for (const cm of cmCandidates) {
-          if (typeof cm.lineBlockAtHeight !== 'function' || !cm.state?.doc?.lineAt) continue;
-          const scrollDOM = cm.scrollDOM || container?.querySelector('.cm-scroller');
+          if (!cm || typeof cm.lineBlockAtHeight !== 'function' || !cm.state?.doc?.lineAt) continue;
+          const scrollDOM = cm.scrollDOM || (container?.querySelector('.cm-scroller') as HTMLElement | null);
           if (!scrollDOM) continue;
           const topOffset = Math.max(0, (scrollDOM.scrollTop || 0) + 50);
           const lineBlock = cm.lineBlockAtHeight(topOffset);
@@ -2427,14 +2517,14 @@ class ChapterPipelinePlugin extends Plugin {
           }
         }
 
-        const editor = view.editor || view.editMode?.editor;
+        const editor = targetView?.editor || targetView?.editMode?.editor;
         if (editor && typeof editor.getCursor === 'function') {
           const cursor = editor.getCursor('from');
           if (cursor && Number.isInteger(cursor.line)) return cursor.line;
         }
       } else {
-        const previewRoot = view.contentEl?.querySelector('.markdown-preview-view');
-        const scroller = this.getViewScroller(container, view) || previewRoot;
+        const previewRoot = (view as { contentEl?: HTMLElement })?.contentEl?.querySelector('.markdown-preview-view');
+        const scroller = this.getViewScroller(container || null, view) || previewRoot;
         if (!previewRoot || !scroller) return 0;
         const visibleHeadingLine = this.getVisibleReadingHeadingLine(view, container, chapters);
         if (visibleHeadingLine !== null) return visibleHeadingLine;
@@ -2445,7 +2535,7 @@ class ChapterPipelinePlugin extends Plugin {
 
         let closestLine = 0;
         for (const chap of chapters) {
-          const heading = this.getReadingHeading(view, chap);
+          const heading = this.getReadingHeading(view as MarkdownView, chap);
           if (heading) {
             if (heading.getBoundingClientRect().top <= activeBaseline) {
               closestLine = chap.line;
@@ -2471,22 +2561,27 @@ class ChapterPipelinePlugin extends Plugin {
     return 0;
   }
 
-  getLivePreviewHeadingLine(container: any, chapters: any = []) {
-    const scroller = container?.querySelector('.cm-scroller');
-    if (!scroller || !chapters.length) return null;
+  /** Find the closest heading line within the live preview baseline. */
+  getLivePreviewHeadingLine(container: HTMLElement | null | undefined, chapters: ChapterNode[] = []): number | null {
+    if (!container || !chapters.length) return null;
+    const scroller = container.querySelector('.cm-scroller');
+    if (!scroller) return null;
     const scrollerRect = scroller.getBoundingClientRect();
     const activeBaseline = scrollerRect.top + 70;
-    const renderedLines: any[] = Array.from(container.querySelectorAll('.cm-line, .cm-heading'));
-    let closestLine = null;
+    const renderedLines: Element[] = Array.from(container.querySelectorAll('.cm-line, .cm-heading'));
+    let closestLine: number | null = null;
     let closestTop = -Infinity;
 
     for (const lineEl of renderedLines) {
+      const classListObj = lineEl.classList as unknown as { [Symbol.iterator]?: () => IterableIterator<string>; values?: (() => Iterable<string>) | Iterable<string> } | undefined;
       const classNames = lineEl.classList
-        ? (typeof lineEl.classList[Symbol.iterator] === 'function'
+        ? (typeof classListObj?.[Symbol.iterator] === 'function'
           ? Array.from(lineEl.classList)
-          : (lineEl.classList.values ? Array.from(lineEl.classList.values) : []))
+          : (typeof classListObj?.values === 'function'
+            ? Array.from(classListObj.values())
+            : (classListObj?.values ? Array.from(classListObj.values) : [])))
         : String(lineEl.className || '').split(/\s+/);
-      const levelMatch = classNames.map((name: any) => String(name).match(/^HyperMD-header-([1-6])$/)).find(Boolean);
+      const levelMatch = classNames.map((name: string) => String(name).match(/^HyperMD-header-([1-6])$/)).find(Boolean);
       const isHeading = Boolean(levelMatch) || classNames.includes('HyperMD-header') || classNames.includes('cm-heading');
       if (!isHeading) continue;
 
@@ -2496,18 +2591,18 @@ class ChapterPipelinePlugin extends Plugin {
       const dataLine = lineEl.getAttribute?.('data-line');
       const lineNumber = dataLine === null || dataLine === undefined ? NaN : parseInt(dataLine, 10);
       let matchedChapter = Number.isInteger(lineNumber)
-        ? chapters.find((chapter: any) => chapter.line === lineNumber)
+        ? chapters.find((chapter: ChapterNode) => chapter.line === lineNumber)
         : null;
 
       if (!matchedChapter) {
         const level = levelMatch ? parseInt(levelMatch[1], 10) : null;
-        const renderedTitle = normalizeHeadingText(lineEl.textContent);
-        matchedChapter = chapters.find((chapter: any) => {
+        const renderedTitle = normalizeHeadingText(lineEl.textContent || '');
+        matchedChapter = chapters.find((chapter: ChapterNode) => {
           if (level && chapter.level !== level) return false;
           const title = normalizeHeadingText(chapter.title);
           const rawTitle = normalizeHeadingText(chapter.rawHeading || chapter.title);
-          return renderedTitle && (renderedTitle === title || renderedTitle === rawTitle || renderedTitle.includes(title) || title.includes(renderedTitle));
-        });
+          return Boolean(renderedTitle) && (renderedTitle === title || renderedTitle === rawTitle || renderedTitle.includes(title) || title.includes(renderedTitle));
+        }) || null;
       }
 
       if (matchedChapter) {
@@ -2519,10 +2614,22 @@ class ChapterPipelinePlugin extends Plugin {
     return closestLine;
   }
 
-  jumpToHeading(view: any, chap: any) {
-    const targetView = (view && view.file)
-      ? view
-      : this.app.workspace.getActiveViewOfType(MarkdownView);
+  jumpToHeading(view: unknown, chap: ChapterLike | number): void {
+    const targetView = (view && (view as { file?: TFile }).file)
+      ? view as (MarkdownView & {
+        file?: TFile;
+        contentEl?: HTMLElement;
+        setEphemeralState?: (state: unknown) => void;
+        currentMode?: { applyScroll?: (line: number) => void };
+        previewMode?: { applyScroll?: (line: number) => void };
+      })
+      : this.app.workspace.getActiveViewOfType(MarkdownView) as (MarkdownView & {
+        file?: TFile;
+        contentEl?: HTMLElement;
+        setEphemeralState?: (state: unknown) => void;
+        currentMode?: { applyScroll?: (line: number) => void };
+        previewMode?: { applyScroll?: (line: number) => void };
+      }) | null;
     if (!targetView) return;
 
     const line = (typeof chap === 'number') ? chap : chap.line;
@@ -2598,7 +2705,25 @@ class ChapterPipelinePlugin extends Plugin {
     }
 
     const editor = targetView.editor;
-    const cm = editor?.cm || editor?.editor?.cm || targetView.editMode?.editor?.cm || targetView.editMode?.cm;
+    const targetEditor = targetView as {
+      editor?: {
+        cm?: unknown;
+        setCursor?: (pos: { line: number; ch: number }) => void;
+        scrollIntoView?: (range: { from: { line: number; ch: number }; to: { line: number; ch: number } }, center?: boolean) => void;
+        editor?: { cm?: unknown };
+      };
+      editMode?: {
+        editor?: { cm?: unknown };
+        cm?: unknown;
+      };
+    };
+    const cm = (targetEditor.editor?.cm || targetEditor.editor?.editor?.cm || targetEditor.editMode?.editor?.cm || targetEditor.editMode?.cm) as {
+      state?: { doc?: { lines: number; line: (n: number) => { from: number } } };
+      constructor?: { scrollIntoView?: (pos: number, opts: { y: string; yMargin: number }) => unknown };
+      dispatch?: (args: { effects: unknown }) => void;
+      lineBlockAt?: (pos: number) => { top: number } | null;
+      coordsAtPos?: (pos: number) => { top: number } | null;
+    } | undefined;
     const scroller = targetView.contentEl?.querySelector('.cm-scroller');
 
     if (editor?.setCursor) {
@@ -2618,11 +2743,11 @@ class ChapterPipelinePlugin extends Plugin {
       try {
         const EditorViewClass = cm.constructor;
         if (EditorViewClass && typeof EditorViewClass.scrollIntoView === 'function') {
-          cm.dispatch({
+          cm.dispatch?.({
             effects: EditorViewClass.scrollIntoView(targetPos, { y: 'start', yMargin: 20 })
           });
         } else {
-          const block = cm.lineBlockAt(targetPos);
+          const block = cm.lineBlockAt?.(targetPos);
           if (scroller && block) {
             scroller.scrollTop = Math.max(0, block.top - 20);
           }
@@ -2648,7 +2773,7 @@ class ChapterPipelinePlugin extends Plugin {
             }
           } else {
             try {
-              const freshBlock = cm.lineBlockAt(targetPos);
+              const freshBlock = cm.lineBlockAt?.(targetPos);
               if (freshBlock) {
                 const delta = freshBlock.top - scroller.scrollTop - 20;
                 if (Math.abs(delta) > 1) {
@@ -2671,11 +2796,11 @@ class ChapterPipelinePlugin extends Plugin {
 
     // 降级保底
     if (editor) {
-      editor.scrollIntoView({ from: { line: line, ch: 0 }, to: { line: line, ch: 0 } }, false);
+      editor.scrollIntoView({ from: { line, ch: 0 }, to: { line, ch: 0 } }, false);
     }
   }
 
-  onunload() {
+  onunload(): void {
     if (this.soundEngine && typeof this.soundEngine.destroy === 'function') {
       this.soundEngine.destroy();
     }
@@ -2684,7 +2809,7 @@ class ChapterPipelinePlugin extends Plugin {
       this.refreshFrame = null;
     }
     if (this.pendingFrames) {
-      this.pendingFrames.forEach((frameId: any) => window.cancelAnimationFrame(frameId));
+      this.pendingFrames.forEach((frameId: number) => window.cancelAnimationFrame(frameId));
       this.pendingFrames.clear();
     }
     if (this.refreshTimer !== null) {
@@ -2696,29 +2821,29 @@ class ChapterPipelinePlugin extends Plugin {
       this.readingSaveTimer = null;
       this.saveSettings().catch(() => {});
     }
-    this.observers.forEach((obs: any) => obs.disconnect());
+    this.observers.forEach((obs: ResizeObserver | MutationObserver) => obs.disconnect());
     this.observers.clear();
-    this.viewObservers.forEach((obs: any) => obs.disconnect());
+    this.viewObservers.forEach((obs: ResizeObserver | MutationObserver) => obs.disconnect());
     this.viewObservers.clear();
     this.renderVersions.clear();
     this.chapterCache?.clear?.();
     this.documentRevisions?.clear?.();
-    this.scrollBindings.forEach(({ scrollers, scroller, handler }: any) => {
-      (scrollers || (scroller ? [scroller] : [])).forEach((boundScroller: any) => {
+    this.scrollBindings.forEach(({ scrollers, scroller, handler }) => {
+      (scrollers || (scroller ? [scroller] : [])).forEach((boundScroller: HTMLElement) => {
         boundScroller?.removeEventListener?.('scroll', handler, true);
       });
     });
     this.scrollBindings.clear();
     if (this.viewTooltips) {
-      this.viewTooltips.forEach((tooltip: any) => tooltip?.remove?.());
+      this.viewTooltips.forEach((tooltip: HTMLElement) => tooltip?.remove?.());
       this.viewTooltips.clear();
     }
     if (typeof document !== 'undefined' && typeof document.querySelectorAll === 'function') {
-      document.querySelectorAll('.codex-stepper-container').forEach((el: any) => el.remove());
-      document.querySelectorAll('.codex-floating-tooltip').forEach((el: any) => el.remove());
+      document.querySelectorAll('.codex-stepper-container').forEach((el: Element) => el.remove());
+      document.querySelectorAll('.codex-floating-tooltip').forEach((el: Element) => el.remove());
     } else if (typeof document !== 'undefined' && document.body && typeof document.body.querySelectorAll === 'function') {
-      document.body.querySelectorAll('.codex-stepper-container').forEach((el: any) => el.remove());
-      document.body.querySelectorAll('.codex-floating-tooltip').forEach((el: any) => el.remove());
+      document.body.querySelectorAll('.codex-stepper-container').forEach((el: Element) => el.remove());
+      document.body.querySelectorAll('.codex-floating-tooltip').forEach((el: Element) => el.remove());
     }
   }
 }
