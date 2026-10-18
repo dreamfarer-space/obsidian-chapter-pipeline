@@ -31,9 +31,9 @@
   },
   "homepage": "https://github.com/dreamfarer-space/obsidian-chapter-pipeline#readme",
   "devDependencies": {
-    "@types/node": "^26.6.2",
+    "@types/node": "^26.6.5",
     "esbuild": "^0.28.2",
-    "obsidian": "^1.13.1",
+    "obsidian": "^1.14.4",
     "typescript": "^7.0.2"
   }
 }
